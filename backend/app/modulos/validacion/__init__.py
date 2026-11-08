@@ -1,0 +1,1 @@
+"""Validación de datos importados."""

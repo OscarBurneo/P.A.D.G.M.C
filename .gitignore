@@ -28,3 +28,27 @@ Thumbs.db
 /Files/
 /.claude/
 skills-lock.json
+
+# Entorno y secretos
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+.mypy_cache/
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Cobertura y evidencias locales
+htmlcov/
+.coverage
