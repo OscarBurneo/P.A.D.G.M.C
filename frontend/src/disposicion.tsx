@@ -41,6 +41,7 @@ export function Disposicion({ children }: { children: ReactNode }) {
         <button type="button" className="velo" aria-label="Cerrar el menú" onClick={() => setAbierta(false)} />
       ) : null}
       <aside className={`barra ${abierta ? "abierta" : ""}`}>
+        <div className="barra-fija">
         <div className="barra-cabecera">
           <Logo />
           <div className="marca-texto">
@@ -106,6 +107,7 @@ export function Disposicion({ children }: { children: ReactNode }) {
               </div>
             ) : null}
           </div>
+        </div>
         </div>
       </aside>
       <div className="columna">
