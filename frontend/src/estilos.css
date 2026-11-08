@@ -115,11 +115,16 @@ select:focus-visible {
 .marco.colapsada { --barra: 84px; }
 
 .barra {
+  align-self: stretch;
+  min-height: 100vh;
+  background: var(--marino);
+  color: #f4f8fb;
+}
+.barra-fija {
   position: sticky;
   top: 0;
   height: 100vh;
-  background: var(--marino);
-  color: #f4f8fb;
+  max-height: 100vh;
   display: flex;
   flex-direction: column;
   padding: 0.9rem 0.75rem 0.85rem;
@@ -632,9 +637,20 @@ form, .formulario, .filtros { display: grid; gap: 0.75rem; }
   .barra {
     position: fixed;
     z-index: 30;
+    top: 0;
+    bottom: 0;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
     width: min(86vw, 300px);
     transform: translateX(-105%);
     transition: transform 0.2s ease;
+    overflow: hidden;
+  }
+  .barra-fija {
+    position: relative;
+    height: 100%;
+    max-height: 100%;
   }
   .barra.abierta { transform: none; }
   .velo { display: block; }
