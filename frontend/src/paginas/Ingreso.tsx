@@ -1,9 +1,12 @@
 import { FormEvent, useState } from "react";
 import { ErrorApi, api } from "../api";
+import { Logo } from "../componentes/Logo";
+import { useMarca } from "../marca";
 import { useSesion } from "../sesion";
 
 export function Ingreso() {
   const { recargar } = useSesion();
+  const marca = useMarca();
   const [identificador, setIdentificador] = useState("");
   const [contrasena, setContrasena] = useState("");
   const [error, setError] = useState("");
@@ -28,12 +31,13 @@ export function Ingreso() {
 
   return (
     <div className="ingreso">
-      <section className="relato" aria-hidden="true">
-        <p className="sobrelinea">Cooperativa de Ahorro y Crédito</p>
+      <section className="relato">
+        <Logo tamano={56} />
+        <p className="sobrelinea">Cooperativa Padre Julián Lorente</p>
         <h1>Dónde puede crecer la cooperativa.</h1>
         <p>
-          P.A.D.G.M.C reúne ubicación, validación y mapas de calor para orientar la captación de
-          potenciales socios en Loja. Este Sprint 0 abre la puerta: sesión, roles y trazabilidad.
+          {marca.nombre} reúne ubicación y mapas de calor para las provincias donde la cooperativa tiene agencia, no solo
+          Loja. La sesión, los roles y la auditoría siguen controlando quién entra.
         </p>
         <ul>
           <li>Datos</li>
@@ -43,7 +47,7 @@ export function Ingreso() {
       </section>
       <section className="tarjeta-ingreso">
         <p className="sobrelinea">Acceso autorizado</p>
-        <h2>Entrar</h2>
+        <h2>Entrar a {marca.nombre}</h2>
         <form onSubmit={(evento) => void enviar(evento)}>
           <label>
             Identificador

@@ -2,6 +2,8 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { App } from "./App";
+import { ProveedorEjemplo } from "./ejemplo";
+import { ProveedorMarca } from "./marca";
 import { ProveedorSesion } from "./sesion";
 import "./estilos.css";
 
@@ -13,9 +15,13 @@ if (!nodo) {
 createRoot(nodo).render(
   <StrictMode>
     <BrowserRouter>
-      <ProveedorSesion>
-        <App />
-      </ProveedorSesion>
+      <ProveedorMarca>
+        <ProveedorEjemplo>
+          <ProveedorSesion>
+            <App />
+          </ProveedorSesion>
+        </ProveedorEjemplo>
+      </ProveedorMarca>
     </BrowserRouter>
   </StrictMode>,
 );

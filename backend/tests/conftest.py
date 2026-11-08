@@ -75,6 +75,7 @@ def _preparar() -> None:
         sesion.execute(text("DELETE FROM matrices_acceso"))
         sesion.execute(text("DELETE FROM parametros"))
         sesion.execute(text("DELETE FROM ubicaciones"))
+        sesion.execute(text("DELETE FROM cobertura_provincial"))
         sesion.commit()
         sembrar(sesion)
     finally:

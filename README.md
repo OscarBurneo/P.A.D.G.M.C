@@ -4,7 +4,17 @@ Plataforma web de análisis de datos geoespaciales con mapas de calor para la **
 
 El documento de visión usa también la sigla P.A.D.M.C. En este repositorio el nombre del producto es **P.A.D.G.M.C**.
 
-El eje de la solución es **datos + geolocalización + mapas de calor**. El Sprint 0 deja lista la puerta de entrada: sesión, roles, permisos y auditoría. El mapa de calor, la importación y la predicción vienen después.
+El eje de la solución es **datos + geolocalización + mapas de calor**. El Sprint 0 deja lista la puerta de entrada: sesión, roles, permisos y auditoría. Esta rama suma el tablero y la cobertura nacional. La importación de socios y la predicción siguen pendientes.
+
+El nombre visible por defecto es **GeoOportunidades**. Se cambia con `NOMBRE_PRODUCTO` y `SUBTITULO_PRODUCTO` en el entorno; `/api/salud` se lo entrega a la interfaz. El ícono (SVG y PNG de 16 a 1024 px, para una app de escritorio futura) está en [`assets/marca/`](assets/marca/).
+
+## Cobertura nacional
+
+La cooperativa no opera solo en Loja. La configuración inicial marca agencia en Loja, El Oro, Zamora Chinchipe, Pichincha (Distrito Metropolitano de Quito), Santo Domingo de los Tsáchilas, Manabí, Chimborazo y Guayas. Esa lista está en la tabla `cobertura_provincial` y se edita en Configuración.
+
+Los límites provinciales vienen de geoBoundaries gbOpen, Ecuador ADM1, en EPSG:4326. La licencia declarada de ese archivo es **CC0 1.0**. Fuente, cita y URL: [`backend/app/recursos/geografia/FUENTE.md`](backend/app/recursos/geografia/FUENTE.md). El mapa abre sobre el Ecuador continental y muestra Galápagos en un recuadro.
+
+Mientras no haya socios importados, el resumen real está en cero. La interfaz puede mostrar una vista de ejemplo, marcada como tal.
 
 ## Sprint 0
 

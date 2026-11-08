@@ -19,6 +19,7 @@ from app.modulos.auditoria.servicio import registrar
 from app.modulos.auth.rutas import router as router_auth
 from app.modulos.auth.servicio import resolver_sesion
 from app.modulos.autorizacion.rutas import router as router_autorizacion
+from app.modulos.cobertura.rutas import router as router_cobertura
 from app.modulos.importaciones.rutas import router as router_importaciones
 from app.modulos.mapas.rutas import router as router_mapas
 from app.modulos.salud.rutas import router as router_salud
@@ -141,6 +142,7 @@ app.include_router(router_usuarios)
 app.include_router(router_autorizacion)
 app.include_router(router_auditoria)
 app.include_router(router_mapas)
+app.include_router(router_cobertura)
 app.include_router(router_ubicaciones)
 app.include_router(router_importaciones)
 app.include_router(router_validacion)

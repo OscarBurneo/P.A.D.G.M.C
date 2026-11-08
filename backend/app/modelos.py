@@ -3,7 +3,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -124,6 +124,38 @@ class Parametro(Base):
     clave: Mapped[str] = mapped_column(String(80), primary_key=True)
     valor: Mapped[dict] = mapped_column(JSONB, nullable=False)
     actualizado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_ahora)
+
+
+class LimiteProvincial(Base):
+    """Contorno ADM1. La geometría se lee y escribe con SQL, no con el ORM."""
+
+    __tablename__ = "limites_provinciales"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_id)
+    codigo: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
+    nombre: Mapped[str] = mapped_column(String(120), nullable=False)
+    nombre_clave: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    codigo_iso: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    es_galapagos: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class CoberturaProvincial(Base):
+    """Provincias donde la cooperativa tiene agencia. Es configuración, no código."""
+
+    __tablename__ = "cobertura_provincial"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_id)
+    limite_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("limites_provinciales.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+    )
+    codigo: Mapped[str] = mapped_column(String(48), unique=True, nullable=False)
+    nombre: Mapped[str] = mapped_column(String(120), nullable=False)
+    nota: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    activa: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    orden: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
 class MatrizAcceso(Base):
