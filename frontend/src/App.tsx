@@ -2,14 +2,18 @@ import { lazy, Suspense, type ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { Disposicion } from "./disposicion";
 import { Auditoria } from "./paginas/Auditoria";
+import { Ayuda } from "./paginas/Ayuda";
+import { Fuentes } from "./paginas/Fuentes";
+import { Importar } from "./paginas/Importar";
 import { Ingreso } from "./paginas/Ingreso";
 import { Inicio } from "./paginas/Inicio";
+import { Oportunidades } from "./paginas/Oportunidades";
 import { Parametros } from "./paginas/Parametros";
 import { Roles } from "./paginas/Roles";
 import { Usuarios } from "./paginas/Usuarios";
+import { puede, useSesion } from "./sesion";
 
 const Mapa = lazy(() => import("./paginas/Mapa").then((modulo) => ({ default: modulo.Mapa })));
-import { puede, useSesion } from "./sesion";
 
 function RutaPrivada({ children }: { children: ReactNode }) {
   const { cargando, cuenta } = useSesion();
@@ -40,8 +44,40 @@ export function App() {
         element={
           <RutaPrivada>
             <Suspense fallback={<p className="estado">Cargando el mapa…</p>}>
-              <Mapa />
+              {puede(cuenta, "mapas.ver") ? <Mapa /> : <SinPermiso />}
             </Suspense>
+          </RutaPrivada>
+        }
+      />
+      <Route
+        path="/oportunidades"
+        element={
+          <RutaPrivada>
+            {puede(cuenta, "mapas.ver") ? <Oportunidades /> : <SinPermiso />}
+          </RutaPrivada>
+        }
+      />
+      <Route
+        path="/importar"
+        element={
+          <RutaPrivada>
+            {puede(cuenta, "importaciones.cargar") ? <Importar /> : <SinPermiso />}
+          </RutaPrivada>
+        }
+      />
+      <Route
+        path="/fuentes"
+        element={
+          <RutaPrivada>
+            {puede(cuenta, "importaciones.cargar") ? <Fuentes /> : <SinPermiso />}
+          </RutaPrivada>
+        }
+      />
+      <Route
+        path="/ayuda"
+        element={
+          <RutaPrivada>
+            <Ayuda />
           </RutaPrivada>
         }
       />

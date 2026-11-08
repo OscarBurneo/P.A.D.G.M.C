@@ -5,9 +5,11 @@ coordenadas individuales ni identificadores de socios.
 """
 
 from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 
-from app.dependencias import exige
+from app.dependencias import exige, obtener_db
 from app.modelos import Usuario
+from app.modulos.cobertura.servicio import resumen_vacio
 
 router = APIRouter(prefix="/api/mapas", tags=["mapas"])
 
@@ -24,6 +26,14 @@ def agregado(_: Usuario = Depends(exige("mapas.ver"))) -> dict:
         "resolucion_h3": None,
         "nota": _NOTA,
     }
+
+
+@router.get("/resumen")
+def resumen(
+    _: Usuario = Depends(exige("mapas.ver")),
+    db: Session = Depends(obtener_db),
+) -> dict:
+    return resumen_vacio(db)
 
 
 @router.get("/detalle")

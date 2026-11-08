@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { invalidarTerritorio, type ProvinciaTerritorio } from "../cobertura";
 
 type Parametro = {
   clave: string;
@@ -103,6 +104,7 @@ export function Parametros() {
           </li>
         ))}
       </ul>
+      <EditorCobertura />
       <article className="perfil-hash">
         <h2>Perfil de hash</h2>
         <p>
@@ -113,5 +115,69 @@ export function Parametros() {
         <p>{datos.perfil_hash.nota}</p>
       </article>
     </section>
+  );
+}
+
+function EditorCobertura() {
+  const [provincias, setProvincias] = useState<ProvinciaTerritorio[] | null>(null);
+  const [error, setError] = useState("");
+  const [mensaje, setMensaje] = useState("");
+
+  async function cargar() {
+    const respuesta = await api<{ provincias: ProvinciaTerritorio[] }>("/api/cobertura/provincias?contorno=false");
+    setProvincias(
+      respuesta.provincias.slice().sort((a, b) => Number(b.con_agencia) - Number(a.con_agencia) || a.nombre.localeCompare(b.nombre, "es")),
+    );
+  }
+
+  useEffect(() => {
+    void cargar().catch((causa: unknown) => setError(causa instanceof Error ? causa.message : "No se pudo leer la cobertura."));
+  }, []);
+
+  async function cambiar(codigo: string, activa: boolean) {
+    setError("");
+    setMensaje("");
+    try {
+      await api(`/api/cobertura/provincias/${codigo}`, {
+        method: "PATCH",
+        body: JSON.stringify({ activa }),
+      });
+      invalidarTerritorio();
+      setMensaje("Cobertura actualizada. El mapa usa este listado.");
+      await cargar();
+    } catch (causa) {
+      setError(causa instanceof Error ? causa.message : "No se pudo actualizar la provincia.");
+    }
+  }
+
+  return (
+    <article className="perfil-hash">
+      <h2>Provincias con agencia</h2>
+      <p>
+        Esta lista es configuración de la base. No está fija en las pantallas. Al activar una provincia pasa a resaltarse
+        en el mapa del Ecuador.
+      </p>
+      {error ? <p className="error">{error}</p> : null}
+      {mensaje ? <p className="ok">{mensaje}</p> : null}
+      {!provincias ? <p className="estado">Cargando provincias…</p> : null}
+      <ul className="parametros">
+        {(provincias ?? []).map((provincia) => (
+          <li key={provincia.codigo}>
+            <div>
+              <strong>{provincia.nombre}</strong>
+              <p>{provincia.nota || (provincia.es_galapagos ? "Se muestra en el recuadro de Galápagos." : "Provincia del catálogo ADM1.")}</p>
+            </div>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={provincia.con_agencia}
+                onChange={(evento) => void cambiar(provincia.codigo, evento.target.checked)}
+              />
+              <span>Con agencia</span>
+            </label>
+          </li>
+        ))}
+      </ul>
+    </article>
   );
 }

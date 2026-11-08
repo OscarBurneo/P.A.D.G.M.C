@@ -30,6 +30,9 @@ dev = [
 where = ["."]
 include = ["app*"]
 
+[tool.setuptools.package-data]
+app = ["recursos/geografia/*.geojson", "recursos/geografia/*.json", "recursos/geografia/*.md"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

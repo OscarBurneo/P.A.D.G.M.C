@@ -42,6 +42,8 @@ class Ajustes(BaseSettings):
     sesion_duracion_maxima_horas: int = Field(default=8, ge=1, le=72)
     contrasena_longitud_minima: int = Field(default=10, ge=8, le=128)
     proteger_ultima_cuenta_admin: bool = True
+    nombre_producto: str = "GeoOportunidades"
+    subtitulo_producto: str = "Inteligencia territorial"
 
     argon2_time_cost: int = Field(default=3, ge=1, le=10)
     argon2_memory_cost: int = Field(default=65536, ge=8192, le=1048576)

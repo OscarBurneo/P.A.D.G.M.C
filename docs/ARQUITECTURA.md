@@ -15,7 +15,8 @@ Cada módulo habla con los demás por funciones Python y por las rutas HTTP de a
 | `autorizacion` | Catálogo de roles y permisos; cambio de rol; permisos por rol | Entregado |
 | `auditoria` | Consulta. No hay edición ni borrado | Entregado para cuentas, roles y permisos |
 | `admin` | Parámetros de negocio y perfil de hash de solo lectura | Entregado |
-| `mapas` | Agregado vacío y detalle vacío, sin coordenadas de personas | Placeholder |
+| `mapas` | Agregado vacío, detalle vacío y resumen por cobertura, sin coordenadas de personas | Placeholder de socios; el resumen agrupa la cobertura real |
+| `cobertura` | `GET /api/cobertura/provincias`, `PATCH /api/cobertura/provincias/{codigo}` | Límites ADM1 y provincias con agencia |
 | `ubicaciones` | Agregado vacío. El alta responde 501 | Placeholder |
 | `importaciones` | Listado vacío. La carga responde 501 | Placeholder |
 | `validacion` | Responde 501 | Placeholder |
@@ -34,6 +35,8 @@ Esos tres contratos de autenticación no deben cambiar de ruta cuando entre un p
 | `eventos_auditoria` | Append-only |
 | `parametros` | Valores de negocio editables |
 | `ubicaciones` | `geometry(Point, 4326)`, todavía sin filas de negocio |
+| `limites_provinciales` | Contorno ADM1 de Ecuador, `geometry(MultiPolygon, 4326)`. Fuente en `backend/app/recursos/geografia/FUENTE.md` |
+| `cobertura_provincial` | Provincias con agencia. Se siembra desde `cobertura_inicial.json` y se edita con `parametros.editar` |
 
 ## Autenticación
 
@@ -158,4 +161,10 @@ Desde `backend/`, con `BASE_DATOS_URL` apuntando a una base donde el usuario pue
 alembic upgrade head
 ```
 
-La revisión `0001_esquema_inicial` crea el esquema, la extensión, la tabla geográfica y los disparadores de auditoría.
+La revisión `0001_esquema_inicial` crea el esquema, la extensión, la tabla geográfica y los disparadores de auditoría. `0002_cobertura_nacional` añade los límites provinciales y la cobertura. La semilla carga el GeoJSON si la tabla está vacía.
+
+## Cobertura nacional
+
+Los límites son las 24 provincias de geoBoundaries gbOpen (Ecuador ADM1, identificador `ECU-ADM1-780006`, año representado 2011). La licencia declarada para ese archivo es CC0 1.0. El detalle, la cita y la URL del archivo simplificado están en [`backend/app/recursos/geografia/FUENTE.md`](../backend/app/recursos/geografia/FUENTE.md).
+
+La lista de provincias con agencia no está escrita en las consultas: vive en `cobertura_provincial`. La semilla propone Loja, El Oro, Zamora Chinchipe, Pichincha (incluye el Distrito Metropolitano de Quito), Santo Domingo de los Tsáchilas, Manabí, Chimborazo y Guayas. Quien administra parámetros puede activar o quitar cualquiera de las 24. El mapa encuadra el continente y deja Galápagos en un recuadro. Todavía no hay cantones ni registros de socios: el resumen real devuelve ceros.

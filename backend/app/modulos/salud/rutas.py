@@ -31,4 +31,6 @@ def salud(db: Session = Depends(obtener_db)) -> dict:
         "srid_referencia": 4326,
         "h3_disponible": h3_disponible,
         "h3_habilitada": h3_habilitada,
+        "nombre_producto": ajustes.nombre_producto.strip() or "GeoOportunidades",
+        "subtitulo_producto": ajustes.subtitulo_producto.strip() or "Inteligencia territorial",
     }
