@@ -1,0 +1,50 @@
+[
+  {
+    "codigo": "loja",
+    "nombre": "Loja",
+    "orden": 1,
+    "nota": null
+  },
+  {
+    "codigo": "el-oro",
+    "nombre": "El Oro",
+    "orden": 2,
+    "nota": null
+  },
+  {
+    "codigo": "zamora-chinchipe",
+    "nombre": "Zamora Chinchipe",
+    "orden": 3,
+    "nota": null
+  },
+  {
+    "codigo": "pichincha",
+    "nombre": "Pichincha",
+    "orden": 4,
+    "nota": "Incluye el Distrito Metropolitano de Quito."
+  },
+  {
+    "codigo": "santo-domingo-de-los-tsachilas",
+    "nombre": "Santo Domingo de los Tsáchilas",
+    "orden": 5,
+    "nota": null
+  },
+  {
+    "codigo": "manabi",
+    "nombre": "Manabí",
+    "orden": 6,
+    "nota": null
+  },
+  {
+    "codigo": "chimborazo",
+    "nombre": "Chimborazo",
+    "orden": 7,
+    "nota": null
+  },
+  {
+    "codigo": "guayas",
+    "nombre": "Guayas",
+    "orden": 8,
+    "nota": null
+  }
+]

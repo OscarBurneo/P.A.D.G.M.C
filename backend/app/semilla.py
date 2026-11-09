@@ -17,6 +17,7 @@ from app.configuracion import ajustes
 from app.modelos import MatrizAcceso, Parametro, Permiso, Rol, RolPermiso, Usuario
 from app.modulos.auditoria.servicio import registrar
 from app.modulos.auth.servicio import ahora_utc
+from app.modulos.cobertura.datos import sembrar_geografia
 from app.seguridad.contrasenas import es_marcador, generar_hash, validar_politica
 
 _CORREO = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -28,6 +29,7 @@ def sembrar(db: Session) -> None:
     _matriz(db, roles, permisos)
     _parametros(db)
     _admin(db, roles["administrador"])
+    sembrar_geografia(db)
     db.commit()
 
 
