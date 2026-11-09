@@ -1,0 +1,72 @@
+name: Integración continua
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    name: Ruff y pruebas
+    runs-on: ubuntu-latest
+    services:
+      postgis:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: padgmc
+          POSTGRES_PASSWORD: padgmc_prueba
+          POSTGRES_DB: padgmc
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U padgmc -d padgmc"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar dependencias
+        working-directory: backend
+        run: pip install -e ".[dev]"
+      - name: Ruff
+        run: |
+          ruff check backend
+          ruff format --check backend
+      - name: Pruebas contra PostGIS
+        working-directory: backend
+        run: pytest
+
+  frontend:
+    name: Compilación del frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Instalar
+        working-directory: frontend
+        run: npm ci
+      - name: Comprobación de tipos
+        working-directory: frontend
+        run: npm run typecheck
+      - name: Compilación
+        working-directory: frontend
+        run: npm run build
+
+  secretos:
+    name: Escaneo de secretos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Escanear el árbol de trabajo
+        run: python herramientas/escanear_secretos.py
+      - name: Demostrar el bloqueo con un secreto ficticio
+        run: python herramientas/demostrar_bloqueo_secreto.py
