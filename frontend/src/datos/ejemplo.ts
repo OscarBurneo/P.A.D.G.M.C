@@ -60,6 +60,41 @@ export function indiceMedioEjemplo() {
   return Math.round(total / CANTONES_EJEMPLO.length);
 }
 
+export type FilaRankingEjemplo = {
+  codigo: string;
+  nombre: string;
+  indice: number;
+  crecimiento: number;
+  socios: number;
+};
+
+/** Provincias de la vista de ejemplo, ordenadas por índice ilustrativo. No es un ranking de la cooperativa. */
+export function rankingProvinciasEjemplo(): FilaRankingEjemplo[] {
+  const grupos = new Map<string, { codigo: string; nombre: string; indices: number[]; crecimientos: number[]; socios: number }>();
+  for (const canton of CANTONES_EJEMPLO) {
+    const actual = grupos.get(canton.codigoProvincia) ?? {
+      codigo: canton.codigoProvincia,
+      nombre: canton.provincia,
+      indices: [],
+      crecimientos: [],
+      socios: 0,
+    };
+    actual.indices.push(canton.indice);
+    actual.crecimientos.push(canton.crecimiento);
+    actual.socios += canton.socios;
+    grupos.set(canton.codigoProvincia, actual);
+  }
+  return [...grupos.values()]
+    .map((grupo) => ({
+      codigo: grupo.codigo,
+      nombre: grupo.nombre,
+      indice: Math.round(grupo.indices.reduce((suma, valor) => suma + valor, 0) / grupo.indices.length),
+      crecimiento: Math.round(grupo.crecimientos.reduce((suma, valor) => suma + valor, 0) / grupo.crecimientos.length),
+      socios: grupo.socios,
+    }))
+    .sort((a, b) => b.indice - a.indice);
+}
+
 export function resumenProvinciaEjemplo(codigo: string) {
   const lista = CANTONES_EJEMPLO.filter((canton) => canton.codigoProvincia === codigo);
   if (lista.length === 0) {

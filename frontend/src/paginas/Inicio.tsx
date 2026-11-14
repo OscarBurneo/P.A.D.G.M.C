@@ -1,31 +1,44 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { type ResumenReal } from "../cobertura";
 import { Icono } from "../componentes/Icono";
 import {
   CALIDAD_EJEMPLO,
   CANTONES_EJEMPLO,
-  type CantonEjemplo,
   indiceMedioEjemplo,
+  rankingProvinciasEjemplo,
   sociosEjemplo,
   zonasAltas,
 } from "../datos/ejemplo";
 import { useEjemplo } from "../ejemplo";
-import { type FocoZona, useFoco } from "../foco";
 import { formatoEntero, formatoNumero } from "../formato";
 import { puede, useSesion } from "../sesion";
 
-const COLUMNAS = 9;
-const FILAS = 6;
+const TOP_RANKING = 5;
+
+type Lote = {
+  id?: string;
+  nombre?: string;
+  fuente?: string;
+  validos?: number;
+  invalidos?: number;
+  actualizado_en?: string;
+  estado?: string;
+};
 
 export function Inicio() {
   const { cuenta } = useSesion();
   const ejemplo = useEjemplo();
-  const { zona, fijar } = useFoco();
+  const [params] = useSearchParams();
   const [resumen, setResumen] = useState<ResumenReal | null>(null);
   const [error, setError] = useState("");
+  const [lotes, setLotes] = useState<Lote[] | null>(null);
+  const [notaLotes, setNotaLotes] = useState("");
+  const [errorLotes, setErrorLotes] = useState("");
   const puedeMapa = puede(cuenta, "mapas.ver");
+  const puedeLotes = puede(cuenta, "importaciones.cargar");
+  const consulta = (params.get("q") ?? "").trim().toLocaleLowerCase("es");
 
   useEffect(() => {
     if (!puedeMapa) {
@@ -36,7 +49,26 @@ export function Inicio() {
       .catch((causa: unknown) => setError(causa instanceof Error ? causa.message : "No se pudo leer el resumen."));
   }, [puedeMapa]);
 
-  const celdas = useMemo(() => (ejemplo.activo ? mallaEjemplo() : []), [ejemplo.activo]);
+  useEffect(() => {
+    if (!puedeLotes) {
+      return;
+    }
+    void api<{ lotes: Lote[]; nota: string }>("/api/importaciones")
+      .then((respuesta) => {
+        setLotes(respuesta.lotes);
+        setNotaLotes(respuesta.nota);
+      })
+      .catch((causa: unknown) => setErrorLotes(causa instanceof Error ? causa.message : "No se pudo leer los lotes."));
+  }, [puedeLotes]);
+
+  const ranking = useMemo(() => {
+    if (!ejemplo.activo) {
+      return [];
+    }
+    return rankingProvinciasEjemplo()
+      .filter((fila) => !consulta || fila.nombre.toLocaleLowerCase("es").includes(consulta))
+      .slice(0, TOP_RANKING);
+  }, [consulta, ejemplo.activo]);
   const ruta = useMemo(
     () => [...CANTONES_EJEMPLO].sort((a, b) => b.indice - a.indice).slice(0, 3),
     [],
@@ -89,52 +121,55 @@ export function Inicio() {
         )}
       </article>
 
-      <article className="panel hex-panel">
+      <article className="panel ranking-panel">
         <div className="panel-title">
           <div>
-            <span>Malla de densidad</span>
-            <h2>Concentración por celda territorial</h2>
+            <span>Ranking</span>
+            <h2>Provincias con mayor oportunidad</h2>
           </div>
-          {puedeMapa ? (
-            <Link to="/mapa">
-              Abrir atlas <Icono nombre="flecha" />
-            </Link>
-          ) : null}
+          {ejemplo.activo ? <em className="chip-ejemplo">Ejemplo</em> : null}
         </div>
         {ejemplo.activo ? (
-          <>
-            <p className="nota-inline">
-              <em className="chip-ejemplo">Ejemplo</em> Celdas ilustrativas a partir de los cantones de demostración. No hay una malla H3 con registros.
-            </p>
-            <div className="hex-field" role="group" aria-label="Celdas de densidad de ejemplo">
-              {celdas.map((fila, indiceFila) => (
-                <div className="hex-row" key={indiceFila}>
-                  {fila.map((celda) => (
-                    <button
-                      key={celda.id}
-                      type="button"
-                      className={`hex ${celda.level} ${zona.ejemplo && zona.zonaNombre === celda.canton.nombre ? "is-selected" : ""}`}
-                      aria-pressed={zona.ejemplo && zona.zonaNombre === celda.canton.nombre}
-                      aria-label={`${celda.canton.nombre}, densidad ilustrativa ${Math.round(celda.valor * 100)} por ciento`}
-                      onClick={() => fijar(focoDesdeCanton(celda.canton))}
-                    />
-                  ))}
-                </div>
+          ranking.length > 0 ? (
+            <ol className="ranking-lista">
+              {ranking.map((fila, posicion) => (
+                <li key={fila.codigo}>
+                  {puedeMapa ? (
+                    <Link className="ranking-fila" to={`/mapa?provincia=${encodeURIComponent(fila.codigo)}`}>
+                      <FilaRanking posicion={posicion} nombre={fila.nombre} indice={fila.indice} crecimiento={fila.crecimiento} socios={fila.socios} />
+                    </Link>
+                  ) : (
+                    <div className="ranking-fila">
+                      <FilaRanking posicion={posicion} nombre={fila.nombre} indice={fila.indice} crecimiento={fila.crecimiento} socios={fila.socios} />
+                    </div>
+                  )}
+                </li>
               ))}
+            </ol>
+          ) : (
+            <div className="empty-state">
+              <strong>Ninguna provincia coincide</strong>
+              <span>Pruebe otro texto en el buscador.</span>
             </div>
-            <div className="density-key">
-              <span>Menor</span>
-              <i />
-              <span>Mayor concentración</span>
-            </div>
-          </>
+          )
         ) : (
           <div className="empty-state">
-            <strong>Sin registros para la malla</strong>
-            <span>El servicio de mapas no trae celdas. La concentración aparecerá cuando existan socios importados.</span>
+            <strong>Sin ranking de oportunidad</strong>
+            <span>
+              {resumen
+                ? `${resumen.provincias.length} provincias con agencia y ${formatoEntero(resumen.total_registros)} registros. El resumen no trae índice ni tendencia.`
+                : "El resumen no trae índice ni tendencia por provincia."}
+            </span>
           </div>
         )}
       </article>
+      <EstadoDatos
+        ejemplo={ejemplo.activo}
+        puedeLotes={puedeLotes}
+        lotes={lotes}
+        nota={notaLotes}
+        error={errorLotes}
+      />
 
       <article className="panel signal-panel">
         <div className="panel-title compact">
@@ -205,46 +240,131 @@ export function Inicio() {
   );
 }
 
-function focoDesdeCanton(canton: CantonEjemplo): FocoZona {
-  return {
-    provinciaCodigo: canton.codigoProvincia,
-    provinciaNombre: canton.provincia,
-    zonaNombre: canton.nombre,
-    indice: canton.indice,
-    socios: canton.socios,
-    crecimiento: canton.crecimiento,
-    nivel: canton.nivel,
-    ejemplo: true,
-    lng: canton.lng,
-    lat: canton.lat,
-  };
-}
-
-function mallaEjemplo() {
-  return Array.from({ length: FILAS }, (_, fila) =>
-    Array.from({ length: COLUMNAS }, (_, columna) => celdaEjemplo(columna, fila)),
+function FilaRanking({
+  posicion,
+  nombre,
+  indice,
+  crecimiento,
+  socios,
+}: {
+  posicion: number;
+  nombre: string;
+  indice: number;
+  crecimiento: number;
+  socios: number;
+}) {
+  const tendencia = `${crecimiento > 0 ? "+" : ""}${crecimiento} %`;
+  return (
+    <>
+      <span className="ranking-puesto">{String(posicion + 1).padStart(2, "0")}</span>
+      <span>
+        <b>{nombre}</b>
+        <small>{formatoEntero(socios)} ilustrativos</small>
+      </span>
+      <span className="ranking-valor">
+        {indice}
+        <span>{tendencia}</span>
+      </span>
+    </>
   );
 }
 
-function celdaEjemplo(columna: number, fila: number) {
-  const x = columna / (COLUMNAS - 1);
-  const y = fila / (FILAS - 1);
-  const lng = -81.2 + x * 6;
-  const lat = 1.45 + y * -6.5;
-  let valor = 0.05;
-  let cercano = CANTONES_EJEMPLO[0];
-  let mejor = Number.POSITIVE_INFINITY;
-  for (const canton of CANTONES_EJEMPLO) {
-    const dx = (lng - canton.lng) / 6;
-    const dy = (lat - canton.lat) / 6.5;
-    const distancia = dx * dx + dy * dy;
-    valor += (canton.indice / 100) * Math.exp(-distancia / 0.01);
-    if (distancia < mejor) {
-      mejor = distancia;
-      cercano = canton;
-    }
-  }
-  const limitado = Math.min(1, valor);
-  const level = limitado > 0.72 ? "h4" : limitado > 0.48 ? "h3" : limitado > 0.28 ? "h2" : "h1";
-  return { id: `${fila}-${columna}`, level, valor: limitado, canton: cercano };
+function EstadoDatos({
+  ejemplo,
+  puedeLotes,
+  lotes,
+  nota,
+  error,
+}: {
+  ejemplo: boolean;
+  puedeLotes: boolean;
+  lotes: Lote[] | null;
+  nota: string;
+  error: string;
+}) {
+  const lote = lotes?.[0];
+  const hayLote = Boolean(lote);
+  const mostrarEjemplo = ejemplo && !hayLote;
+
+  return (
+    <article className="panel estado-datos">
+      <div className="panel-title">
+        <div>
+          <span>Estado de los datos</span>
+          <h2>Último lote</h2>
+        </div>
+        {mostrarEjemplo ? <em className="chip-ejemplo">Ejemplo</em> : null}
+      </div>
+      {error ? <p className="error">{error}</p> : null}
+      {mostrarEjemplo ? (
+        <dl>
+          <div>
+            <dt>Lote</dt>
+            <dd>Vista de ejemplo</dd>
+          </div>
+          <div>
+            <dt>Fuente</dt>
+            <dd>Cantones ilustrativos, no un archivo</dd>
+          </div>
+          <div>
+            <dt>Válidos</dt>
+            <dd>—</dd>
+          </div>
+          <div>
+            <dt>Inválidos</dt>
+            <dd>—</dd>
+          </div>
+          <div>
+            <dt>Actualización</dt>
+            <dd>—</dd>
+          </div>
+          <div>
+            <dt>Estado</dt>
+            <dd>No es un lote</dd>
+          </div>
+        </dl>
+      ) : hayLote && lote ? (
+        <dl>
+          <div>
+            <dt>Lote</dt>
+            <dd>{lote.nombre ?? "Sin nombre"}</dd>
+          </div>
+          <div>
+            <dt>Fuente</dt>
+            <dd>{lote.fuente ?? "—"}</dd>
+          </div>
+          <div>
+            <dt>Válidos</dt>
+            <dd>{lote.validos === undefined ? "—" : formatoEntero(lote.validos)}</dd>
+          </div>
+          <div>
+            <dt>Inválidos</dt>
+            <dd>{lote.invalidos === undefined ? "—" : formatoEntero(lote.invalidos)}</dd>
+          </div>
+          <div>
+            <dt>Actualización</dt>
+            <dd>{lote.actualizado_en ? new Date(lote.actualizado_en).toLocaleString("es-EC") : "—"}</dd>
+          </div>
+          <div>
+            <dt>Estado</dt>
+            <dd>{lote.estado ?? "—"}</dd>
+          </div>
+        </dl>
+      ) : (
+        <div className="empty-state">
+          <strong>Sin lote cargado</strong>
+          <span>
+            {!puedeLotes
+              ? "Su rol no consulta las importaciones."
+              : nota || "No hay lotes. La API no entrega nombre, válidos, inválidos, fecha ni estado."}
+          </span>
+        </div>
+      )}
+      <p className="nota-capa">
+        {mostrarEjemplo
+          ? `${formatoEntero(sociosEjemplo())} registros ilustrativos en ${CANTONES_EJEMPLO.length} cantones. No hay conteo de válidos, inválidos ni fecha de carga.`
+          : "Pendiente: un lote con nombre, fuente, válidos, inválidos, fecha y estado. Hoy /api/importaciones solo devuelve la lista vacía."}
+      </p>
+    </article>
+  );
 }
