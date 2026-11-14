@@ -33,7 +33,7 @@ export function Ingreso() {
     <div className="ingreso">
       <section className="relato">
         <Logo tamano={56} />
-        <p className="sobrelinea">Cooperativa Padre Julián Lorente</p>
+        <p className="chapter-code">Cooperativa Padre Julián Lorente</p>
         <h1>Dónde puede crecer la cooperativa.</h1>
         <p>
           {marca.nombre} reúne ubicación y mapas de calor para las provincias donde la cooperativa tiene agencia, no solo
