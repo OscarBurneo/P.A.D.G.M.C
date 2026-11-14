@@ -46,6 +46,25 @@ const LINEA_SIN_CAPA = [
   "#8FB0C6",
 ] as maplibregl.ExpressionSpecification;
 
+/**
+ * El encuadre continental cae alrededor del zoom 6,2–6,5: ahí el coroplético
+ * se lee mejor sin calles. A partir de 7,5 una provincia ocupa el lienzo y
+ * OpenMapTiles ya dibuja vías principales y ciudades. Loja, al encuadrarse,
+ * queda cerca de 8–9, así que el mapa base aparece al entrar en la provincia.
+ */
+const ZOOM_MAPA_BASE = 7.5;
+const ESTILO_MAPA_BASE = "https://tiles.openfreemap.org/styles/positron";
+const FUENTE_MAPA_BASE = "openmaptiles";
+const OPACIDAD_SIN_BASE = 0.92;
+const OPACIDAD_CON_BASE = 0.5;
+
+type EstiloLibre = {
+  glyphs?: string;
+  sprite?: string | Array<{ id?: string; url?: string }>;
+  sources?: Record<string, maplibregl.SourceSpecification>;
+  layers?: maplibregl.LayerSpecification[];
+};
+
 export function MapaEcuador({
   compacto = false,
   modo = "calor",
@@ -71,6 +90,7 @@ export function MapaEcuador({
   const onProvinciaRef = useRef(onProvincia);
   const [territorio, setTerritorio] = useState<Territorio | null>(null);
   const [error, setError] = useState("");
+  const [mapaBaseVisible, setMapaBaseVisible] = useState(false);
   const densidad = capas ? capas.densidad : modo === "calor";
   const registros = capas ? capas.registros : modo === "puntos";
   const agencias = capas?.agencias ?? true;
@@ -103,6 +123,62 @@ export function MapaEcuador({
     mapaRef.current = mapa;
     const observador = new ResizeObserver(() => mapa.resize());
     observador.observe(contenedor.current);
+    const capasBase: string[] = [];
+    let baseActiva = false;
+    let baseVisible = false;
+    let fallosTesela = 0;
+
+    function pintarOpacidad(visible: boolean) {
+      if (mapa.getLayer("relleno")) {
+        mapa.setPaintProperty("relleno", "fill-opacity", visible ? OPACIDAD_CON_BASE : OPACIDAD_SIN_BASE);
+      }
+    }
+
+    function mostrarBase(visible: boolean) {
+      if (visible === baseVisible) {
+        return;
+      }
+      baseVisible = visible;
+      for (const id of capasBase) {
+        if (mapa.getLayer(id)) {
+          mapa.setLayoutProperty(id, "visibility", visible ? "visible" : "none");
+        }
+      }
+      pintarOpacidad(visible);
+      setMapaBaseVisible(visible);
+    }
+
+    function sincronizarBase() {
+      if (!baseActiva) {
+        mostrarBase(false);
+        return;
+      }
+      mostrarBase(mapa.getZoom() >= ZOOM_MAPA_BASE);
+    }
+
+    function retirarBase() {
+      baseActiva = false;
+      fallosTesela = 0;
+      mostrarBase(false);
+    }
+
+    mapa.on("zoom", sincronizarBase);
+    mapa.on("moveend", sincronizarBase);
+    mapa.on("error", (evento) => {
+      const fuente = (evento as { sourceId?: string }).sourceId;
+      if (fuente !== FUENTE_MAPA_BASE) {
+        return;
+      }
+      const mensaje = evento.error.message ?? "";
+      const esTesela = mensaje.includes(".pbf");
+      if (esTesela) {
+        fallosTesela += 1;
+        if (fallosTesela < 4) {
+          return;
+        }
+      }
+      retirarBase();
+    });
     mapa.on("load", () => {
       mapa.addSource("provincias", { type: "geojson", data: VACIO, promoteId: "codigo" });
       mapa.addLayer({
@@ -192,12 +268,20 @@ export function MapaEcuador({
       mapa.on("mouseleave", "relleno", () => popup.remove());
       listo.current = true;
       mapa.resize();
+      void incorporarMapaBase(mapa, capasBase, () => mapaRef.current === mapa).then((incorporada) => {
+        if (mapaRef.current !== mapa) {
+          return;
+        }
+        baseActiva = incorporada;
+        sincronizarBase();
+      });
     });
     return () => {
       listo.current = false;
       observador.disconnect();
       mapa.remove();
       mapaRef.current = null;
+      setMapaBaseVisible(false);
     };
   }, [compacto]);
 
@@ -324,6 +408,19 @@ export function MapaEcuador({
           <span>Galápagos</span>
         </div>
       ) : null}
+      <p className={`atribucion-mapa ${mapaBaseVisible ? "" : "oculta"}`}>
+        <a href="https://openfreemap.org/" target="_blank" rel="noreferrer">
+          OpenFreeMap
+        </a>
+        {" © "}
+        <a href="https://openmaptiles.org/" target="_blank" rel="noreferrer">
+          OpenMapTiles
+        </a>
+        {" © "}
+        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">
+          OpenStreetMap contributors
+        </a>
+      </p>
       {ejemplo ? <p className="chip-ejemplo mapa-chip">Capa de ejemplo</p> : null}
       {mostrarAviso && !ejemplo ? (
         <p className="aviso-mapa">Sin registros para calcular concentración. Los límites provinciales sí están cargados.</p>
@@ -331,6 +428,61 @@ export function MapaEcuador({
       {error ? <p className="error mapa-error">{error}</p> : null}
     </div>
   );
+}
+
+async function incorporarMapaBase(mapa: maplibregl.Map, capasBase: string[], sigueVivo: () => boolean) {
+  try {
+    const respuesta = await fetch(ESTILO_MAPA_BASE, { signal: AbortSignal.timeout(8000) });
+    if (!respuesta.ok || !sigueVivo()) {
+      return false;
+    }
+    const estilo = (await respuesta.json()) as EstiloLibre;
+    if (!sigueVivo() || !mapa.getLayer("relleno")) {
+      return false;
+    }
+    if (estilo.glyphs) {
+      mapa.setGlyphs(estilo.glyphs);
+    }
+    const sprite = urlSprite(estilo.sprite);
+    if (sprite) {
+      mapa.setSprite(sprite);
+    }
+    const fuentesUsadas = new Set(
+      (estilo.layers ?? []).map((capa) => ("source" in capa ? capa.source : undefined)).filter((fuente) => typeof fuente === "string"),
+    );
+    for (const [id, fuente] of Object.entries(estilo.sources ?? {})) {
+      if (!fuentesUsadas.has(id) || mapa.getSource(id)) {
+        continue;
+      }
+      mapa.addSource(id, fuente);
+    }
+    for (const capa of estilo.layers ?? []) {
+      const id = `ofm-${capa.id}`;
+      if (mapa.getLayer(id)) {
+        continue;
+      }
+      if ("source" in capa && typeof capa.source === "string" && !mapa.getSource(capa.source)) {
+        continue;
+      }
+      const layout = { ...("layout" in capa ? capa.layout : undefined), visibility: "none" as const };
+      mapa.addLayer({ ...capa, id, layout } as maplibregl.LayerSpecification, "relleno");
+      capasBase.push(id);
+    }
+    return capasBase.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+function urlSprite(sprite: EstiloLibre["sprite"]) {
+  if (!sprite) {
+    return null;
+  }
+  if (typeof sprite === "string") {
+    return sprite;
+  }
+  const primera = sprite.find((item) => item.url);
+  return primera?.url ?? null;
 }
 
 function encuadrar(mapa: maplibregl.Map, caja: Caja) {

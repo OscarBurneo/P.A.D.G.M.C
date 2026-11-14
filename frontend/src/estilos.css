@@ -681,6 +681,21 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
 .mapa-chip,
 .aviso-mapa,
 .mapa-error { position: absolute; z-index: 2; margin: 0; }
+.atribucion-mapa {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+  max-width: min(340px, calc(100% - 80px));
+  margin: 0;
+  padding: 4px 6px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+.atribucion-mapa.oculta { display: none; }
+.atribucion-mapa a { color: var(--navy); }
 .mapa-chip { top: 12px; right: 12px; left: auto; }
 .aviso-mapa {
   left: 12px;
