@@ -55,6 +55,27 @@ export function zonasAltas() {
   return CANTONES_EJEMPLO.filter((canton) => canton.nivel === "Muy alta" || canton.nivel === "Alta").length;
 }
 
+export function indiceMedioEjemplo() {
+  const total = CANTONES_EJEMPLO.reduce((suma, canton) => suma + canton.indice, 0);
+  return Math.round(total / CANTONES_EJEMPLO.length);
+}
+
+export function resumenProvinciaEjemplo(codigo: string) {
+  const lista = CANTONES_EJEMPLO.filter((canton) => canton.codigoProvincia === codigo);
+  if (lista.length === 0) {
+    return null;
+  }
+  const socios = lista.reduce((suma, canton) => suma + canton.socios, 0);
+  const indice = Math.round(lista.reduce((suma, canton) => suma + canton.indice, 0) / lista.length);
+  const crecimiento = Math.round(lista.reduce((suma, canton) => suma + canton.crecimiento, 0) / lista.length);
+  const nivel = lista.some((canton) => canton.nivel === "Muy alta")
+    ? "Muy alta"
+    : lista.some((canton) => canton.nivel === "Alta")
+      ? "Alta"
+      : "Media";
+  return { socios, indice, crecimiento, nivel } as const;
+}
+
 export const COLORES_SERIE = [
   "#003B68",
   "#00538E",

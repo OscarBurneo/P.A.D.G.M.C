@@ -1,40 +1,30 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api";
-import { cargarTerritorio, type ResumenReal, type Territorio } from "../cobertura";
-import { Dona } from "../componentes/Dona";
+import { type ResumenReal } from "../cobertura";
 import { Icono } from "../componentes/Icono";
-import { Sparkline } from "../componentes/Sparkline";
-import { TablaZonas, type FilaZona } from "../componentes/TablaZonas";
 import {
   CALIDAD_EJEMPLO,
   CANTONES_EJEMPLO,
-  COLORES_SERIE,
-  SERIES_EJEMPLO,
+  type CantonEjemplo,
+  indiceMedioEjemplo,
   sociosEjemplo,
   zonasAltas,
 } from "../datos/ejemplo";
 import { useEjemplo } from "../ejemplo";
+import { type FocoZona, useFoco } from "../foco";
 import { formatoEntero, formatoNumero } from "../formato";
 import { puede, useSesion } from "../sesion";
 
-const MapaEcuador = lazy(() => import("../componentes/MapaEcuador").then((modulo) => ({ default: modulo.MapaEcuador })));
-
-type Modo = "calor" | "puntos";
-type Corte = "provincia" | "canton";
+const COLUMNAS = 9;
+const FILAS = 6;
 
 export function Inicio() {
   const { cuenta } = useSesion();
   const ejemplo = useEjemplo();
-  const [params] = useSearchParams();
-  const [modo, setModo] = useState<Modo>("calor");
-  const [corte, setCorte] = useState<Corte>("provincia");
+  const { zona, fijar } = useFoco();
   const [resumen, setResumen] = useState<ResumenReal | null>(null);
-  const [territorio, setTerritorio] = useState<Territorio | null>(null);
   const [error, setError] = useState("");
-  const navigate = useNavigate();
-  const consulta = (params.get("q") ?? "").trim().toLocaleLowerCase("es");
-  const puedeImportar = puede(cuenta, "importaciones.cargar");
   const puedeMapa = puede(cuenta, "mapas.ver");
 
   useEffect(() => {
@@ -44,260 +34,217 @@ export function Inicio() {
     void api<ResumenReal>("/api/mapas/resumen")
       .then(setResumen)
       .catch((causa: unknown) => setError(causa instanceof Error ? causa.message : "No se pudo leer el resumen."));
-    void cargarTerritorio().then(setTerritorio).catch(() => undefined);
   }, [puedeMapa]);
 
-  const filas = useMemo(() => filasVisibles(ejemplo.activo, resumen, consulta), [ejemplo.activo, resumen, consulta]);
-  const partes = useMemo(() => partesDona(ejemplo.activo, resumen, corte), [ejemplo.activo, resumen, corte]);
-  const provinciaMapa =
-    consulta && territorio
-      ? (territorio.provincias.find(
-          (item) => !item.es_galapagos && item.nombre.toLocaleLowerCase("es").includes(consulta),
-        )?.codigo ?? null)
-      : null;
+  const celdas = useMemo(() => (ejemplo.activo ? mallaEjemplo() : []), [ejemplo.activo]);
+  const ruta = useMemo(
+    () => [...CANTONES_EJEMPLO].sort((a, b) => b.indice - a.indice).slice(0, 3),
+    [],
+  );
+  const mayor = useMemo(
+    () => [...CANTONES_EJEMPLO].sort((a, b) => b.crecimiento - a.crecimiento)[0],
+    [],
+  );
+
+  const indice = ejemplo.activo ? indiceMedioEjemplo() : null;
+  const socios = ejemplo.activo ? sociosEjemplo() : resumen?.total_registros;
+  const zonas = ejemplo.activo ? CANTONES_EJEMPLO.length : resumen?.zonas_analizadas;
+  const calidad = ejemplo.activo ? CALIDAD_EJEMPLO : (resumen?.calidad_registros ?? null);
 
   return (
-    <section className="tablero">
-      <header className="encabezado-pagina">
-        <div>
-          <p className="sobrelinea">Inteligencia territorial</p>
-          <h1>Resumen geoespacial</h1>
-          <p className="lead">
-            Monitoree la concentración de potenciales socios en las provincias con agencia e identifique zonas de oportunidad.
-          </p>
+    <div className="summary-layout">
+      {error ? <p className="error span-completo">{error}</p> : null}
+      <article className="pulse-panel">
+        <span className="eyebrow">Índice de expansión</span>
+        {ejemplo.activo ? <em className="chip-ejemplo">Ejemplo</em> : null}
+        <div className={`pulse-score ${indice === null ? "vacio" : ""}`}>
+          {indice === null ? "Sin índice" : indice}
+          {indice !== null ? <small>/100</small> : null}
         </div>
-        <div className="acciones-pagina">
-          <label>
-            Periodo
-            <select defaultValue="30" aria-describedby="nota-periodo">
-              <option value="30">Últimos 30 días</option>
-              <option value="90" disabled>
-                Últimos 90 días (requiere registros)
-              </option>
-            </select>
-          </label>
-          <p id="nota-periodo" className="sr">
-            El periodo no cambia cifras reales porque todavía no hay cargas.
-          </p>
-          {puedeImportar ? (
-            <Link className="boton" to="/importar">
-              <Icono nombre="importar" /> Importar CSV
+        <p>
+          {ejemplo.activo
+            ? "Promedio ilustrativo de los cantones de la vista de ejemplo, sobre la cobertura nacional. No es una medición de la cooperativa."
+            : (resumen?.nota ?? "Sin registros de socios para calcular el índice de expansión.")}
+        </p>
+        <div className="pulse-strip">
+          <span>
+            <b>{socios === undefined ? "—" : formatoEntero(socios)}</b>
+            potenciales socios
+          </span>
+          <span>
+            <b>{zonas === undefined ? "—" : formatoEntero(zonas)}</b>
+            zonas analizadas
+          </span>
+          <span>
+            <b>{calidad === null ? "—" : `${formatoNumero(calidad)} %`}</b>
+            datos válidos
+          </span>
+        </div>
+        {puedeMapa ? (
+          <Link className="pulse-action" to="/oportunidades">
+            Priorizar zonas <Icono nombre="flecha" />
+          </Link>
+        ) : (
+          <p className="foco-vacio">Su rol no incluye la priorización.</p>
+        )}
+      </article>
+
+      <article className="panel hex-panel">
+        <div className="panel-title">
+          <div>
+            <span>Malla de densidad</span>
+            <h2>Concentración por celda territorial</h2>
+          </div>
+          {puedeMapa ? (
+            <Link to="/mapa">
+              Abrir atlas <Icono nombre="flecha" />
             </Link>
           ) : null}
         </div>
-      </header>
-      {error ? <p className="error">{error}</p> : null}
-      {!ejemplo.activo ? (
-        <p className="nota">
-          No hay registros de socios para calcular indicadores.
-          <button type="button" className="secundario" onClick={() => ejemplo.cambiar(true)}>
-            Mostrar datos de ejemplo
-          </button>
-        </p>
-      ) : null}
-      <div className="kpis">
-        <Kpi
-          icono="personas"
-          titulo="Potenciales socios"
-          valor={ejemplo.activo ? formatoEntero(sociosEjemplo()) : "0"}
-          detalle={ejemplo.activo ? "+12,4 % vs. periodo anterior" : "Sin registros importados"}
-          serie={ejemplo.activo ? SERIES_EJEMPLO.socios : [0, 0, 0, 0]}
-          color="#2F92C5"
-          ejemplo={ejemplo.activo}
-        />
-        <Kpi
-          icono="pin"
-          titulo="Zonas analizadas"
-          valor={ejemplo.activo ? formatoEntero(CANTONES_EJEMPLO.length) : "0"}
-          detalle={ejemplo.activo ? "Cantones de la vista de ejemplo" : "Sin zonas con registros"}
-          serie={ejemplo.activo ? SERIES_EJEMPLO.zonas : [0, 0, 0, 0]}
-          color="#5EA9D2"
-          ejemplo={ejemplo.activo}
-        />
-        <Kpi
-          icono="diana"
-          titulo="Alta oportunidad"
-          valor={ejemplo.activo ? formatoEntero(zonasAltas()) : "0"}
-          detalle={ejemplo.activo ? "Nivel alto o muy alto, de ejemplo" : "Sin índice calculado"}
-          serie={ejemplo.activo ? SERIES_EJEMPLO.alta : [0, 0, 0, 0]}
-          color="#0067AF"
-          ejemplo={ejemplo.activo}
-        />
-        <Kpi
-          icono="calidad"
-          titulo="Calidad de datos"
-          valor={ejemplo.activo ? `${formatoNumero(CALIDAD_EJEMPLO)} %` : "—"}
-          detalle={ejemplo.activo ? "Porcentaje ilustrativo de registros válidos" : "Sin registros válidos"}
-          serie={ejemplo.activo ? SERIES_EJEMPLO.calidad : [0, 0, 0, 0]}
-          color="#0A6B40"
-          ejemplo={ejemplo.activo}
-        />
-      </div>
-      <div className="panel-medio">
-        <article className="tarjeta">
-          <header className="tarjeta-cabecera">
-            <div>
-              <p className="etiqueta">Distribución geográfica</p>
-              <h2>Concentración de potenciales socios</h2>
+        {ejemplo.activo ? (
+          <>
+            <p className="nota-inline">
+              <em className="chip-ejemplo">Ejemplo</em> Celdas ilustrativas a partir de los cantones de demostración. No hay una malla H3 con registros.
+            </p>
+            <div className="hex-field" role="group" aria-label="Celdas de densidad de ejemplo">
+              {celdas.map((fila, indiceFila) => (
+                <div className="hex-row" key={indiceFila}>
+                  {fila.map((celda) => (
+                    <button
+                      key={celda.id}
+                      type="button"
+                      className={`hex ${celda.level} ${zona.ejemplo && zona.zonaNombre === celda.canton.nombre ? "is-selected" : ""}`}
+                      aria-pressed={zona.ejemplo && zona.zonaNombre === celda.canton.nombre}
+                      aria-label={`${celda.canton.nombre}, densidad ilustrativa ${Math.round(celda.valor * 100)} por ciento`}
+                      onClick={() => fijar(focoDesdeCanton(celda.canton))}
+                    />
+                  ))}
+                </div>
+              ))}
             </div>
-            <div className="segmento" role="group" aria-label="Tipo de capa">
-              <button type="button" aria-pressed={modo === "calor"} onClick={() => setModo("calor")}>
-                Calor
-              </button>
-              <button type="button" aria-pressed={modo === "puntos"} onClick={() => setModo("puntos")}>
-                Puntos
-              </button>
+            <div className="density-key">
+              <span>Menor</span>
+              <i />
+              <span>Mayor concentración</span>
             </div>
-          </header>
-          {puedeMapa ? (
-            <Suspense fallback={<p className="estado">Cargando el mapa del Ecuador…</p>}>
-              <MapaEcuador
-                compacto
-                modo={modo}
-                ejemplo={ejemplo.activo}
-                provincia={provinciaMapa}
-                onProvincia={(codigo) => navigate(`/mapa?provincia=${encodeURIComponent(codigo)}`)}
-              />
-            </Suspense>
-          ) : (
-            <p className="nota">Su rol no incluye el mapa agregado.</p>
-          )}
-          <footer className="tarjeta-pie">
-            <span>{ejemplo.activo ? "Capa ilustrativa sobre límites reales" : "Límites provinciales, sin capa de calor"}</span>
-            {puedeMapa ? <Link to="/mapa">Explorar mapa completo</Link> : null}
-          </footer>
-        </article>
-        <article className="tarjeta">
-          <header className="tarjeta-cabecera">
-            <div>
-              <p className="etiqueta">Composición</p>
-              <h2>{corte === "provincia" ? "Distribución por provincia" : "Distribución por cantón"}</h2>
-            </div>
-            <div className="segmento" role="group" aria-label="Agrupación de la dona">
-              <button type="button" aria-pressed={corte === "provincia"} onClick={() => setCorte("provincia")}>
-                Provincia
-              </button>
-              <button type="button" aria-pressed={corte === "canton"} onClick={() => setCorte("canton")}>
-                Cantón
-              </button>
-            </div>
-          </header>
-          <Dona
-            partes={partes}
-            tituloTotal={corte === "provincia" ? "Distribución de ejemplo por provincia" : "Distribución de ejemplo por cantón"}
-            vacio={resumen?.nota ?? "Sin registros para distribuir."}
-          />
-          <footer className="tarjeta-pie">
-            <span>{ejemplo.activo ? "Porcentajes de la vista de ejemplo" : "La cobertura real sigue en cero"}</span>
-            <Link to="/oportunidades">Ver reporte detallado</Link>
-          </footer>
-        </article>
-      </div>
-      <article className="tarjeta">
-        <header className="tarjeta-cabecera">
-          <div>
-            <p className="etiqueta">Priorización comercial</p>
-            <h2>Zonas con mayor oportunidad</h2>
+          </>
+        ) : (
+          <div className="empty-state">
+            <strong>Sin registros para la malla</strong>
+            <span>El servicio de mapas no trae celdas. La concentración aparecerá cuando existan socios importados.</span>
           </div>
-          <Link to="/oportunidades">Ver todas</Link>
-        </header>
-        <TablaZonas filas={filas} />
+        )}
       </article>
-    </section>
+
+      <article className="panel signal-panel">
+        <div className="panel-title compact">
+          <div>
+            <span>Señales</span>
+            <h2>Cambios detectados</h2>
+          </div>
+          <Icono nombre="actividad" />
+        </div>
+        {ejemplo.activo && mayor ? (
+          <>
+            <p className="nota-inline">
+              <em className="chip-ejemplo">Ejemplo</em>
+            </p>
+            <div className="signal">
+              <b>+{mayor.crecimiento}%</b>
+              <p>{mayor.nombre} tiene el mayor crecimiento de la vista de ejemplo.</p>
+            </div>
+            <div className="signal">
+              <b>{zonasAltas()}</b>
+              <p>Zonas de nivel alto o muy alto en la vista de ejemplo.</p>
+            </div>
+            <div className="signal">
+              <b>—</b>
+              <p>No hay un conteo de geocodificación manual: no existen lotes.</p>
+            </div>
+          </>
+        ) : (
+          <div className="empty-state">
+            <strong>Sin señales</strong>
+            <span>No hay registros para detectar cambios de concentración.</span>
+          </div>
+        )}
+      </article>
+
+      <article className="panel corridor-panel">
+        <div className="panel-title compact">
+          <div>
+            <span>Corredor sugerido</span>
+            <h2>Ruta comercial prioritaria</h2>
+          </div>
+          <Icono nombre="radar" />
+        </div>
+        {ejemplo.activo && ruta.length === 3 ? (
+          <>
+            <p className="nota-inline">
+              <em className="chip-ejemplo">Ejemplo</em> Esquema entre los tres cantones de mayor índice ilustrativo. No es una ruta calculada.
+            </p>
+            <svg viewBox="0 0 320 150" role="img" aria-label={`Corredor de ejemplo entre ${ruta.map((item) => item.nombre).join(", ")}`}>
+              <path className="corridor-shadow" d="M30 112 C78 88, 93 70, 154 72 S236 35, 286 34" />
+              <path className="corridor-line" d="M30 112 C78 88, 93 70, 154 72 S236 35, 286 34" />
+              <circle cx="30" cy="112" r="8" />
+              <circle cx="154" cy="72" r="12" />
+              <circle cx="286" cy="34" r="9" />
+              <text x="18" y="139">{ruta[2]?.nombre}</text>
+              <text x="124" y="104">{ruta[0]?.nombre}</text>
+              <text x="214" y="20">{ruta[1]?.nombre}</text>
+            </svg>
+          </>
+        ) : (
+          <div className="empty-state">
+            <strong>Sin corredor sugerido</strong>
+            <span>No hay registros para trazar una ruta comercial.</span>
+          </div>
+        )}
+      </article>
+    </div>
   );
 }
 
-function Kpi({
-  icono,
-  titulo,
-  valor,
-  detalle,
-  serie,
-  color,
-  ejemplo,
-}: {
-  icono: "personas" | "pin" | "diana" | "calidad";
-  titulo: string;
-  valor: string;
-  detalle: string;
-  serie: number[];
-  color: string;
-  ejemplo: boolean;
-}) {
-  return (
-    <article className="kpi">
-      <div className="kpi-titulo">
-        <span className="kpi-icono">
-          <Icono nombre={icono} />
-        </span>
-        <h2>{titulo}</h2>
-        {ejemplo ? <span className="chip-ejemplo">Ejemplo</span> : null}
-      </div>
-      <Sparkline valores={serie} color={color} />
-      <p className="valor">{valor}</p>
-      <p className="detalle">{detalle}</p>
-    </article>
+function focoDesdeCanton(canton: CantonEjemplo): FocoZona {
+  return {
+    provinciaCodigo: canton.codigoProvincia,
+    provinciaNombre: canton.provincia,
+    zonaNombre: canton.nombre,
+    indice: canton.indice,
+    socios: canton.socios,
+    crecimiento: canton.crecimiento,
+    nivel: canton.nivel,
+    ejemplo: true,
+    lng: canton.lng,
+    lat: canton.lat,
+  };
+}
+
+function mallaEjemplo() {
+  return Array.from({ length: FILAS }, (_, fila) =>
+    Array.from({ length: COLUMNAS }, (_, columna) => celdaEjemplo(columna, fila)),
   );
 }
 
-function filasVisibles(ejemplo: boolean, resumen: ResumenReal | null, consulta: string): FilaZona[] {
-  if (ejemplo) {
-    return CANTONES_EJEMPLO.filter((canton) => coincide(consulta, canton.provincia, canton.nombre, canton.nivel))
-      .slice()
-      .sort((a, b) => b.indice - a.indice)
-      .map((canton) => ({
-        codigo: canton.codigoProvincia,
-        provincia: canton.provincia,
-        canton: canton.nombre,
-        socios: canton.socios,
-        indice: canton.indice,
-        crecimiento: canton.crecimiento,
-        nivel: canton.nivel,
-      }));
-  }
-  return (resumen?.provincias ?? [])
-    .filter((provincia) => coincide(consulta, provincia.nombre))
-    .map((provincia) => ({
-      codigo: provincia.codigo,
-      provincia: provincia.nombre,
-      canton: "Sin cantones con registros",
-      socios: null,
-      indice: null,
-      crecimiento: null,
-      nivel: null,
-    }));
-}
-
-function partesDona(ejemplo: boolean, resumen: ResumenReal | null, corte: Corte) {
-  if (!ejemplo) {
-    return (resumen?.provincias ?? []).map((provincia, indice) => ({
-      nombre: provincia.nombre,
-      valor: 0,
-      color: COLORES_SERIE[indice % COLORES_SERIE.length],
-    }));
-  }
-  if (corte === "canton") {
-    return CANTONES_EJEMPLO.map((canton, indice) => ({
-      nombre: canton.nombre,
-      valor: canton.socios,
-      color: COLORES_SERIE[indice % COLORES_SERIE.length],
-    }));
-  }
-  const acumulado = new Map<string, number>();
+function celdaEjemplo(columna: number, fila: number) {
+  const x = columna / (COLUMNAS - 1);
+  const y = fila / (FILAS - 1);
+  const lng = -81.2 + x * 6;
+  const lat = 1.45 + y * -6.5;
+  let valor = 0.05;
+  let cercano = CANTONES_EJEMPLO[0];
+  let mejor = Number.POSITIVE_INFINITY;
   for (const canton of CANTONES_EJEMPLO) {
-    acumulado.set(canton.provincia, (acumulado.get(canton.provincia) ?? 0) + canton.socios);
+    const dx = (lng - canton.lng) / 6;
+    const dy = (lat - canton.lat) / 6.5;
+    const distancia = dx * dx + dy * dy;
+    valor += (canton.indice / 100) * Math.exp(-distancia / 0.01);
+    if (distancia < mejor) {
+      mejor = distancia;
+      cercano = canton;
+    }
   }
-  return [...acumulado.entries()].map(([nombre, valor], indice) => ({
-    nombre,
-    valor,
-    color: COLORES_SERIE[indice % COLORES_SERIE.length],
-  }));
+  const limitado = Math.min(1, valor);
+  const level = limitado > 0.72 ? "h4" : limitado > 0.48 ? "h3" : limitado > 0.28 ? "h2" : "h1";
+  return { id: `${fila}-${columna}`, level, valor: limitado, canton: cercano };
 }
-
-function coincide(consulta: string, ...textos: string[]) {
-  if (!consulta) {
-    return true;
-  }
-  return textos.some((texto) => texto.toLocaleLowerCase("es").includes(consulta));
-}
-

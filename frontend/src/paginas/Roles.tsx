@@ -69,11 +69,9 @@ export function Roles() {
   }
 
   return (
-    <section className="panel ancho">
-      <p className="sobrelinea">Matriz {version}</p>
-      <h1>Roles y permisos</h1>
+    <section className="hoja">
       <p className="aviso">
-        Propuesta por rol, sin excepciones por cuenta. Estado: pendiente de aprobación (P-02, P-09).
+        Matriz {version || "sin versión"}. Propuesta por rol, sin excepciones por cuenta. Estado: pendiente de aprobación (P-02, P-09).
       </p>
       {error ? <p className="error" role="alert">{error}</p> : null}
       {mensaje ? <p className="ok">{mensaje}</p> : null}
@@ -83,6 +81,7 @@ export function Roles() {
             <button
               key={rol.codigo}
               type="button"
+              aria-pressed={rol.codigo === seleccion}
               className={rol.codigo === seleccion ? "activo" : "secundario"}
               onClick={() => elegir(rol.codigo)}
             >

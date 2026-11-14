@@ -58,10 +58,8 @@ export function Parametros() {
   }
 
   return (
-    <section className="panel ancho">
-      <p className="sobrelinea">P-09</p>
-      <h1>Parámetros</h1>
-      <p className="aviso">Valores propuestos. No hay secretos de despliegue en esta pantalla.</p>
+    <section className="hoja">
+      <p className="aviso">Valores propuestos (P-09). No hay secretos de despliegue en esta pantalla.</p>
       {error ? <p className="error" role="alert">{error}</p> : null}
       {mensaje ? <p className="ok">{mensaje}</p> : null}
       <ul className="parametros">

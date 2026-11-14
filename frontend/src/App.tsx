@@ -18,7 +18,7 @@ const Mapa = lazy(() => import("./paginas/Mapa").then((modulo) => ({ default: mo
 function RutaPrivada({ children }: { children: ReactNode }) {
   const { cargando, cuenta } = useSesion();
   if (cargando) {
-    return <p className="estado">Comprobando la sesión…</p>;
+    return <p className="estado estado-pantalla">Comprobando la sesión…</p>;
   }
   if (!cuenta) {
     return <Navigate to="/ingreso" replace />;
@@ -120,9 +120,9 @@ export function App() {
 
 function SinPermiso() {
   return (
-    <section className="panel">
-      <h1>Sin permiso</h1>
-      <p>Su rol no incluye esta operación. La comprobación también se hace en el servidor.</p>
+    <section className="empty-state">
+      <strong>Sin permiso</strong>
+      <span>Su rol no incluye esta operación. La comprobación también se hace en el servidor.</span>
     </section>
   );
 }

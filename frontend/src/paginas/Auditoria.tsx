@@ -32,9 +32,7 @@ export function Auditoria() {
   }, []);
 
   return (
-    <section className="panel ancho">
-      <p className="sobrelinea">Append-only</p>
-      <h1>Auditoría</h1>
+    <section className="hoja">
       <p className="aviso">La aplicación no puede modificar ni borrar estos eventos. La retención sigue pendiente.</p>
       {error ? <p className="error" role="alert">{error}</p> : null}
       <form
@@ -55,6 +53,7 @@ export function Auditoria() {
         <button type="submit">Filtrar</button>
       </form>
       {eventos.length === 0 ? <p>Todavía no hay eventos para el filtro.</p> : null}
+      <div className="tabla-contenedor">
       <table>
         <caption>Eventos de trazabilidad</caption>
         <thead>
@@ -99,6 +98,7 @@ export function Auditoria() {
           ))}
         </tbody>
       </table>
+      </div>
     </section>
   );
 }
