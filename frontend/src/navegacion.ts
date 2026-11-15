@@ -115,14 +115,14 @@ export const EXTRAS: PaginaExtra[] = [
 ];
 
 export const NOTAS_BITACORA: Record<string, string> = {
-  "/": "Cuando existan cargas, el pulso describirá concentración y movimiento. Hoy no hay una medición de socios.",
-  "/mapa": "Densidad y registros se dibujan en el mapa del Ecuador. Sin socios importados esas capas quedan vacías. Las agencias salen de la cobertura configurada.",
-  "/oportunidades": "El índice combinará volumen, crecimiento y distancia a la agencia cuando existan registros. No hay un modelo en producción.",
-  "/importar": "Un CSV debe traer nombre, latitud, longitud y cantón. La inspección es local: el servidor todavía no publica el lote.",
-  "/fuentes": "Cada lote conservará su origen. Todavía no hay lotes de socios; los límites provinciales sí tienen ficha de fuente.",
+  "/": "El ranking usa el índice de concentración de los lotes publicados. El corredor, las señales y el índice de expansión siguen en ejemplo.",
+  "/mapa": "La capa de calor agrupa los registros publicados. Sin un lote completado esa capa queda vacía. Las agencias salen de la cobertura configurada.",
+  "/oportunidades": "El índice de expansión sigue siendo ilustrativo. El ranking del resumen ya ordena provincias con registros publicados.",
+  "/importar": "CSV o XLSX según el contrato propuesto. El flujo es seleccionar, mapear, validar y publicar. Cancelar vale antes de procesar; retirar conserva el archivo.",
+  "/fuentes": "Cada lote conserva su archivo. Los límites provinciales tienen ficha de fuente.",
   "/usuarios": "Desactive accesos que no se utilicen. La API no ofrece reactivar una cuenta.",
-  "/roles": "Los permisos se guardan por rol y aplican en la siguiente solicitud. Siguen pendientes de aprobación.",
-  "/auditoria": "Las acciones de cuentas, roles y cobertura quedan en este registro inmutable.",
+  "/roles": "Los permisos se guardan por rol y aplican en la siguiente solicitud. Importar, publicar y retirar exigen permiso.",
+  "/auditoria": "Las acciones de cuentas, roles, cobertura e importación quedan en este registro inmutable.",
   "/parametros": "La lista de provincias con agencia es configuración real. El resto de valores sigue pendiente de aprobación.",
   "/ayuda": "Esta guía no modifica datos de la cooperativa.",
 };

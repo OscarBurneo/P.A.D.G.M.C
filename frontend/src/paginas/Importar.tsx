@@ -3,75 +3,199 @@ import { api } from "../api";
 import { Icono } from "../componentes/Icono";
 import { formatoEntero } from "../formato";
 
-type Lote = { id?: string; nombre?: string };
+type Columna = {
+  campo: string;
+  etiqueta: string;
+  obligatorio: boolean;
+};
 
-type Inspeccion = {
-  nombre: string;
-  filas: number;
+type Muestra = { fila: number; clasificacion: string; motivos: string[] };
+
+type Informe = {
+  total_procesadas: number;
+  total_aceptadas: number;
+  total_observadas: number;
+  total_rechazadas: number;
+  cuadra: boolean;
+  estructura_valida: boolean;
   encabezados: string[];
-  incompletas: number;
+  mapeo: Record<string, string | null>;
+  columnas_faltantes: string[];
+  motivos: Record<string, number>;
+  muestra: Muestra[];
+};
+
+type Lote = {
+  id: string;
+  nombre: string;
+  fuente: string;
+  validos: number;
+  observadas: number;
+  rechazadas: number;
+  total: number;
+  cuadra: boolean;
+  actualizado_en: string;
+  estado: string;
+  estado_codigo: string;
+  repetido?: boolean;
+  intentos?: number;
+  informe?: Informe | null;
 };
 
 const PASOS = ["Seleccionar", "Mapear", "Validar", "Publicar"] as const;
-const REQUERIDAS = [
-  { campo: "nombre", etiqueta: "Nombre" },
-  { campo: "latitud", etiqueta: "Latitud" },
-  { campo: "longitud", etiqueta: "Longitud" },
-  { campo: "canton", etiqueta: "Cantón" },
-] as const;
+
+const MOTIVOS: Record<string, string> = {
+  coordenada_fuera_de_ecuador: "Fuera de Ecuador",
+  identificador_duplicado: "Identificador repetido",
+  ubicacion_coincidente: "Ubicación coincidente",
+  provincia_no_coincide: "Provincia distinta",
+  formato_formula: "Fórmula no ejecutada",
+  formato_latitud: "Latitud inválida",
+  formato_longitud: "Longitud inválida",
+  formato_fecha: "Fecha inválida",
+};
 
 export function Importar() {
   const entrada = useRef<HTMLInputElement>(null);
-  const [nota, setNota] = useState("Cargando el estado de las importaciones…");
+  const [nota, setNota] = useState("Cargando el historial de importaciones…");
+  const [columnas, setColumnas] = useState<Columna[]>([]);
   const [lotes, setLotes] = useState<Lote[]>([]);
+  const [activo, setActivo] = useState<Lote | null>(null);
+  const [mapeo, setMapeo] = useState<Record<string, string | null>>({});
   const [error, setError] = useState("");
   const [aviso, setAviso] = useState("");
+  const [ocupado, setOcupado] = useState(false);
   const [arrastrando, setArrastrando] = useState(false);
-  const [inspeccion, setInspeccion] = useState<Inspeccion | null>(null);
+  const [motivo, setMotivo] = useState("Retiro solicitado");
+
+  async function refrescar() {
+    const respuesta = await api<{ nota: string; columnas: Columna[]; lotes: Lote[] }>("/api/importaciones");
+    setNota(respuesta.nota);
+    setColumnas(respuesta.columnas);
+    setLotes(respuesta.lotes);
+  }
 
   useEffect(() => {
-    void api<{ lotes: Lote[]; nota: string }>("/api/importaciones")
-      .then((respuesta) => {
-        setLotes(respuesta.lotes);
-        setNota(respuesta.nota);
-      })
-      .catch((causa: unknown) => setError(causa instanceof Error ? causa.message : "No se pudo consultar las importaciones."));
+    void refrescar().catch((causa: unknown) => setError(causa instanceof Error ? causa.message : "No se pudo consultar las importaciones."));
   }, []);
 
-  async function leerArchivo(archivo: File | undefined) {
+  function tomar(lote: Lote) {
+    setActivo(lote);
+    setMapeo(lote.informe?.mapeo ?? {});
+    setAviso(lote.repetido ? "El archivo ya estaba cargado. Se registró un intento nuevo y se muestra el lote previo." : "");
+  }
+
+  async function enviar(archivo: File | undefined) {
     setAviso("");
+    setError("");
     if (!archivo) {
       return;
     }
     const nombre = archivo.name.toLocaleLowerCase("es");
-    if (nombre.endsWith(".xlsx") || nombre.endsWith(".xls")) {
-      setAviso("La carga XLSX queda fuera de este alcance.");
+    if (!nombre.endsWith(".csv") && !nombre.endsWith(".xlsx")) {
+      setAviso("Seleccione un archivo CSV o XLSX.");
       return;
     }
-    if (!nombre.endsWith(".csv")) {
-      setAviso("Seleccione un archivo con extensión CSV. El archivo no se envía al servidor.");
-      return;
+    const cuerpo = new FormData();
+    cuerpo.append("archivo", archivo);
+    setOcupado(true);
+    try {
+      const lote = await api<Lote>("/api/importaciones", { method: "POST", body: cuerpo });
+      tomar(lote);
+      await refrescar();
+    } catch (causa: unknown) {
+      setError(causa instanceof Error ? causa.message : "No se pudo cargar el archivo.");
+    } finally {
+      setOcupado(false);
     }
-    if (archivo.size > 8_000_000) {
-      setAviso("El archivo supera 8 MB. La inspección local no lo abre.");
-      return;
-    }
-    const texto = await archivo.text();
-    setInspeccion(inspeccionarCsv(texto, archivo.name));
   }
 
-  const mapeo = REQUERIDAS.map((item) => ({
-    ...item,
-    encabezado: inspeccion?.encabezados.find((encabezado) => coincide(encabezado, item.campo)) ?? null,
-  }));
-  const etapa = inspeccion ? 2 : 0;
+  async function validarMapeo() {
+    if (!activo) {
+      return;
+    }
+    setOcupado(true);
+    setError("");
+    try {
+      const lote = await api<Lote>(`/api/importaciones/${activo.id}/mapeo`, {
+        method: "PATCH",
+        body: JSON.stringify({ mapeo }),
+      });
+      tomar(lote);
+      await refrescar();
+    } catch (causa: unknown) {
+      setError(causa instanceof Error ? causa.message : "No se pudo validar el mapeo.");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  async function publicar() {
+    if (!activo) {
+      return;
+    }
+    setOcupado(true);
+    setError("");
+    try {
+      const lote = await api<Lote>(`/api/importaciones/${activo.id}/publicar`, { method: "POST" });
+      tomar(lote);
+      await refrescar();
+    } catch (causa: unknown) {
+      setError(causa instanceof Error ? causa.message : "No se pudo publicar el lote.");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  async function cancelar() {
+    if (!activo) {
+      return;
+    }
+    setOcupado(true);
+    setError("");
+    try {
+      const lote = await api<Lote>(`/api/importaciones/${activo.id}/cancelar`, { method: "POST" });
+      tomar(lote);
+      await refrescar();
+    } catch (causa: unknown) {
+      setError(causa instanceof Error ? causa.message : "No se pudo cancelar el lote.");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  async function retirar() {
+    if (!activo) {
+      return;
+    }
+    setOcupado(true);
+    setError("");
+    try {
+      const lote = await api<Lote>(`/api/importaciones/${activo.id}/retirar`, {
+        method: "POST",
+        body: JSON.stringify({ motivo }),
+      });
+      tomar(lote);
+      await refrescar();
+    } catch (causa: unknown) {
+      setError(causa instanceof Error ? causa.message : "No se pudo retirar el lote.");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  const informe = activo?.informe;
+  const etapa = !activo ? 0 : activo.estado_codigo === "completado" || activo.estado_codigo === "retirado" ? 4 : informe?.estructura_valida ? 2 : 1;
+  const puedePublicar = activo?.estado_codigo === "pendiente" && (activo.validos > 0 || activo.observadas > 0);
+  const puedeCancelar = activo?.estado_codigo === "pendiente" || activo?.estado_codigo === "finalizado_con_errores";
+  const puedeRetirar = activo?.estado_codigo === "completado";
 
   return (
     <div className="import-layout">
       <p className="aviso span-completo">{nota}</p>
       {error ? <p className="error span-completo">{error}</p> : null}
       {aviso ? (
-        <p className="error span-completo" role="alert">
+        <p className="ok span-completo" role="status">
           {aviso}
         </p>
       ) : null}
@@ -93,28 +217,28 @@ export function Importar() {
         onDrop={(evento) => {
           evento.preventDefault();
           setArrastrando(false);
-          void leerArchivo(evento.dataTransfer.files[0]);
+          void enviar(evento.dataTransfer.files[0]);
         }}
       >
         <input
           ref={entrada}
           type="file"
-          accept=".csv,text/csv"
+          accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           hidden
           aria-describedby="nota-csv"
-          onChange={(evento) => void leerArchivo(evento.target.files?.[0])}
+          onChange={(evento) => void enviar(evento.target.files?.[0])}
         />
         <div className="lab-orbit">
           <Icono nombre="archivo" />
         </div>
-        <h2>{inspeccion ? inspeccion.nombre : "Suelta aquí un CSV para inspeccionarlo"}</h2>
+        <h2>{activo ? activo.nombre : "Suelta aquí un CSV o XLSX"}</h2>
         <p id="nota-csv">
-          {inspeccion
-            ? `${formatoEntero(inspeccion.filas)} filas · ${inspeccion.encabezados.length} columnas detectadas. La lectura queda en el navegador y no crea un lote.`
-            : "El contrato de importación sigue pendiente. Esta pantalla no envía el archivo ni publica un lote."}
+          {activo
+            ? `${formatoEntero(activo.total)} filas · ${activo.estado}. ${activo.intentos ? `${activo.intentos} intentos.` : ""}`
+            : "El archivo se envía al servidor, se valida y queda pendiente hasta que se publique."}
         </p>
         <div className="lab-actions">
-          <button type="button" onClick={() => entrada.current?.click()}>
+          <button type="button" disabled={ocupado} onClick={() => entrada.current?.click()}>
             <Icono nombre="importar" /> Elegir archivo
           </button>
         </div>
@@ -123,59 +247,136 @@ export function Importar() {
         <div className="panel-title compact">
           <div>
             <span>Validación</span>
-            <h2>Columnas obligatorias</h2>
+            <h2>Columnas del contrato</h2>
           </div>
           <Icono nombre="candado" />
         </div>
-        {mapeo.map((item) => (
-          <div className={`map-field ${item.encabezado ? "ok" : ""}`} key={item.campo}>
-            <span>{item.etiqueta}</span>
-            <b>{item.encabezado ?? (inspeccion ? "Falta" : "Pendiente")}</b>
-          </div>
+        {(columnas.length ? columnas : []).map((columna) => (
+          <label className="map-field" key={columna.campo}>
+            <span>{columna.etiqueta}</span>
+            <select
+              value={mapeo[columna.campo] ?? ""}
+              disabled={!informe}
+              onChange={(evento) => setMapeo((actual) => ({ ...actual, [columna.campo]: evento.target.value || null }))}
+            >
+              <option value="">{informe ? "Sin columna" : "Pendiente"}</option>
+              {(informe?.encabezados ?? []).map((encabezado) => (
+                <option key={encabezado} value={encabezado}>
+                  {encabezado}
+                </option>
+              ))}
+            </select>
+          </label>
         ))}
         <div className="quality-meter">
-          <span>Registros completos</span>
+          <span>Resumen reconciliado</span>
           <strong>
-            {inspeccion ? `${formatoEntero(Math.max(0, inspeccion.filas - inspeccion.incompletas))} / ${formatoEntero(inspeccion.filas)}` : "—"}
+            {activo
+              ? `${formatoEntero(activo.validos)} válidas · ${formatoEntero(activo.observadas)} observadas · ${formatoEntero(activo.rechazadas)} rechazadas`
+              : "—"}
           </strong>
         </div>
-        <button type="button" className="publish" disabled>
+        {activo?.cuadra ? <p className="nota-capa">El total cuadra con válidas, observadas y rechazadas.</p> : null}
+        {informe && !informe.estructura_valida ? (
+          <p className="error">Faltan: {informe.columnas_faltantes.join(", ")}.</p>
+        ) : null}
+        <button type="button" className="secundario" disabled={!informe || ocupado} onClick={() => void validarMapeo()}>
+          Validar mapeo
+        </button>
+        <button type="button" className="publish" disabled={!puedePublicar || ocupado} onClick={() => void publicar()}>
           Publicar lote
         </button>
-        <p className="nota-capa">Publicar, cancelar y retirar un lote no están disponibles. El servidor responde que la carga sigue pendiente.</p>
+        <button type="button" className="secundario" disabled={!puedeCancelar || ocupado} onClick={() => void cancelar()}>
+          Cancelar antes de procesar
+        </button>
+        {puedeRetirar ? (
+          <>
+            <label>
+              Motivo del retiro
+              <input value={motivo} onChange={(evento) => setMotivo(evento.target.value)} />
+            </label>
+            <button type="button" className="secundario" disabled={ocupado || !motivo.trim()} onClick={() => void retirar()}>
+              Retirar lote
+            </button>
+          </>
+        ) : null}
+        <p className="nota-capa">Retirar conserva el archivo. El lote deja de contar en el análisis.</p>
       </aside>
+      {informe && informe.muestra.length > 0 ? (
+        <section className="panel span-completo">
+          <h2>Filas observadas y rechazadas</h2>
+          <div className="tabla-contenedor">
+            <table>
+              <caption>Muestra del informe. El conteo completo está en el resumen.</caption>
+              <thead>
+                <tr>
+                  <th>Fila</th>
+                  <th>Clasificación</th>
+                  <th>Motivo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {informe.muestra.slice(0, 8).map((fila) => (
+                  <tr key={`${fila.fila}-${fila.clasificacion}`}>
+                    <td>{fila.fila}</td>
+                    <td>{fila.clasificacion}</td>
+                    <td>{fila.motivos.map((item) => MOTIVOS[item] ?? item.replaceAll("_", " ")).join(", ")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
       <section className="panel span-completo">
-        <h2>Lotes</h2>
-        {lotes.length === 0 ? <p>No hay lotes cargados.</p> : <p>{lotes.length} lotes en el servidor.</p>}
+        <h2>Historial de archivos</h2>
+        {lotes.length === 0 ? (
+          <p>No hay lotes cargados.</p>
+        ) : (
+          <div className="tabla-contenedor">
+            <table>
+              <thead>
+                <tr>
+                  <th>Archivo</th>
+                  <th>Fuente</th>
+                  <th>Válidas</th>
+                  <th>Observadas</th>
+                  <th>Rechazadas</th>
+                  <th>Estado</th>
+                  <th>Fecha</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lotes.map((lote) => (
+                  <tr key={lote.id}>
+                    <td>
+                      <button type="button" className="secundario" onClick={() => void abrir(lote.id)}>
+                        {lote.nombre}
+                      </button>
+                    </td>
+                    <td>{lote.fuente}</td>
+                    <td>{formatoEntero(lote.validos)}</td>
+                    <td>{formatoEntero(lote.observadas)}</td>
+                    <td>{formatoEntero(lote.rechazadas)}</td>
+                    <td>{lote.estado}</td>
+                    <td>{new Date(lote.actualizado_en).toLocaleString("es-EC")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </div>
   );
-}
 
-function coincide(encabezado: string, campo: string) {
-  const normal = normalizar(encabezado);
-  if (campo === "longitud") {
-    return normal.includes("long") || normal.includes("lng") || normal === "lon";
+  async function abrir(id: string) {
+    setError("");
+    try {
+      const lote = await api<Lote>(`/api/importaciones/${id}`);
+      tomar(lote);
+    } catch (causa: unknown) {
+      setError(causa instanceof Error ? causa.message : "No se pudo abrir el lote.");
+    }
   }
-  if (campo === "latitud") {
-    return normal.includes("lat");
-  }
-  return normal.includes(campo);
-}
-
-function normalizar(valor: string) {
-  return valor.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-}
-
-function inspeccionarCsv(texto: string, nombre: string): Inspeccion {
-  const lineas = texto.split(/\r?\n/).filter((linea) => linea.trim());
-  if (lineas.length === 0) {
-    return { nombre, filas: 0, encabezados: [], incompletas: 0 };
-  }
-  const primera = lineas[0] ?? "";
-  const delimitador = primera.includes(";") ? ";" : ",";
-  const encabezados = primera.split(delimitador).map((encabezado) => encabezado.trim().replace(/^"|"$/g, ""));
-  const filas = lineas.slice(1).map((linea) => linea.split(delimitador));
-  const incompletas = filas.filter((fila) => fila.length < encabezados.length || fila.some((celda) => !celda.trim())).length;
-  return { nombre, filas: filas.length, encabezados, incompletas };
 }

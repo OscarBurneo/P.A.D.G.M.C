@@ -13,14 +13,14 @@ Cada módulo habla con los demás por funciones Python y por las rutas HTTP de a
 | `auth` | `POST /api/auth/iniciar-sesion`, `POST /api/auth/cerrar-sesion`, `GET /api/auth/yo` | Entregado |
 | `usuarios` | Alta, consulta, edición de nombre, correo y contraseña, desactivación | Entregado |
 | `autorizacion` | Catálogo de roles y permisos; cambio de rol; permisos por rol | Entregado |
-| `auditoria` | Consulta. No hay edición ni borrado | Entregado para cuentas, roles y permisos |
+| `auditoria` | Consulta. No hay edición ni borrado | Entregado. El sprint 2 suma eventos de importación |
 | `admin` | Parámetros de negocio y perfil de hash de solo lectura | Entregado |
-| `mapas` | Agregado vacío, detalle vacío y resumen por cobertura, sin coordenadas de personas | Placeholder de socios; el resumen agrupa la cobertura real |
+| `mapas` | Agregado sin posiciones de personas, resumen con índice y `GET /api/mapas/calor` | El calor es una grilla, no un socio |
 | `cobertura` | `GET /api/cobertura/provincias`, `PATCH /api/cobertura/provincias/{codigo}` | Límites ADM1 y provincias con agencia |
-| `ubicaciones` | Agregado vacío. El alta responde 501 | Placeholder |
-| `importaciones` | Listado vacío. La carga responde 501 | Placeholder |
-| `validacion` | Responde 501 | Placeholder |
-| `analitica` | Interfaz `ProcesoAnalitico` y `POST /api/analitica/ejemplo` | Ejemplo, sin reglas reales |
+| `ubicaciones` | Conteo de lo publicado. El alta manual responde 501 | Los puntos entran por la publicación del lote |
+| `importaciones` | Carga, mapeo, publicación, cancelación, retiro e historial | Entregado con contrato propuesto |
+| `validacion` | `GET /api/validacion` y `GET /api/validacion/{lote_id}` | Informe de encabezados y filas |
+| `analitica` | Interfaz `ProcesoAnalitico`, ejemplo, e índice `indice_concentracion` | El ejemplo no cambia. El índice es propuesto |
 
 Esos tres contratos de autenticación no deben cambiar de ruta cuando entre un proceso analítico nuevo. La prueba `test_proceso_de_ejemplo_no_cambia_contratos_de_auth` lo vigila (HU-66, RNF-24, RNF-25). El proceso de ejemplo cuenta registros válidos, hoy cero, y no lee contraseñas.
 
@@ -34,7 +34,9 @@ Esos tres contratos de autenticación no deben cambiar de ruta cuando entre un p
 | `sesiones` | Token aleatorio; en base se guarda su SHA-256 |
 | `eventos_auditoria` | Append-only |
 | `parametros` | Valores de negocio editables |
-| `ubicaciones` | `geometry(Point, 4326)`, todavía sin filas de negocio |
+| `ubicaciones` | `geometry(Point, 4326)`, `lote_id` y `atributos_socio` al publicar |
+| `lotes_importacion`, `intentos_carga`, `informes_validacion` | Carga, intento auditado e informe. El archivo vive en disco |
+| `catalogos_proceso`, `ejecuciones_analisis`, `resultados_analisis`, `zonas_analisis` | Índice de concentración. Solo entra lo necesario para el ranking |
 | `limites_provinciales` | Contorno ADM1 de Ecuador, `geometry(MultiPolygon, 4326)`. Fuente en `backend/app/recursos/geografia/FUENTE.md` |
 | `cobertura_provincial` | Provincias con agencia. Se siembra desde `cobertura_inicial.json` y se edita con `parametros.editar` |
 
@@ -62,7 +64,7 @@ La matriz propuesta, versión `0.1.0-propuesta`, estado `pendiente_de_aprobacion
 | `mapas.ver`, `ubicaciones.consultar` | sí | sí |
 | `mapas.detalle` | sí | no |
 | `parametros.leer`, `parametros.editar` | sí | no |
-| `analitica.ejemplo`, `importaciones.cargar`, `validacion.consultar` | sí | no |
+| `analitica.ejemplo`, `importaciones.cargar`, `importaciones.publicar`, `importaciones.retirar`, `validacion.consultar` | sí | no |
 
 Cada solicitud protegida vuelve a leer el rol y los permisos. Un cambio de rol o de permiso se nota en la siguiente llamada, sin volver a iniciar sesión.
 
@@ -107,7 +109,7 @@ CREATE EXTENSION IF NOT EXISTS h3_postgis CASCADE;
 | RG-SEC-01 | El escáner bloquea un secreto ficticio y el árbol versionado pasa limpio | `test_secretos.py` |
 | RG-AN-01 | Un proceso de ejemplo usa la interfaz analítica sin mover las rutas de autenticación | `test_geo_y_contratos.py` |
 
-No hay todavía reglas de normalización, duplicidad ni mapas de calor: dependen de catálogos no aprobados (P-01, P-04, P-05). El umbral extra de cobertura tampoco está aprobado (P-08). La integración continua ejecuta la suite y no deja pasar fallos (RNF-27, en la parte de autenticación y permisos).
+Las reglas de normalización, duplicidad y concentración de este sprint están propuestas y centralizadas (P-01, P-04). No sustituyen el catálogo analítico pendiente (P-05). El umbral extra de cobertura tampoco está aprobado (P-08). La integración continua ejecuta la suite y no deja pasar fallos (RNF-27, en la parte de autenticación y permisos).
 
 ## Catálogo de términos de la interfaz
 
@@ -141,10 +143,10 @@ La contraseña `ClaveSegura123` y la clave `padgmc_prueba` aparecen solo como cr
 
 | Id | Qué falta para dar por aceptada la historia |
 | --- | --- |
-| P-01 | Diccionario e importación CSV/XLSX |
+| P-01 | Diccionario e importación CSV/XLSX. Hay una propuesta versionada; falta la reunión con stakeholders |
 | P-02 | Matriz de atributos, agregación y base legal |
 | P-03 | SRID de la fuente, territorios y método de área |
-| P-04 | Duplicados e idempotencia |
+| P-04 | Duplicados e idempotencia. La regla combinada de este sprint es propuesta |
 | P-05 | Reglas analíticas |
 | P-06 | Ficha de carga y si se aceptan los objetivos de 3 s y 5 s |
 | P-07 | Entorno, copias, custodio y rotación de secretos |
@@ -161,10 +163,26 @@ Desde `backend/`, con `BASE_DATOS_URL` apuntando a una base donde el usuario pue
 alembic upgrade head
 ```
 
-La revisión `0001_esquema_inicial` crea el esquema, la extensión, la tabla geográfica y los disparadores de auditoría. `0002_cobertura_nacional` añade los límites provinciales y la cobertura. La semilla carga el GeoJSON si la tabla está vacía.
+La revisión `0001_esquema_inicial` crea el esquema, la extensión, la tabla geográfica y los disparadores de auditoría. `0002_cobertura_nacional` añade los límites provinciales y la cobertura. `0003_importacion` añade el lote, el intento, el informe, el índice mínimo y `lote_id` en `ubicaciones`. El descenso de `0003` revierte esas tablas y columnas. La semilla carga el GeoJSON si la tabla está vacía.
 
 ## Cobertura nacional
 
 Los límites son las 24 provincias de geoBoundaries gbOpen (Ecuador ADM1, identificador `ECU-ADM1-780006`, año representado 2011). La licencia declarada para ese archivo es CC0 1.0. El detalle, la cita y la URL del archivo simplificado están en [`backend/app/recursos/geografia/FUENTE.md`](../backend/app/recursos/geografia/FUENTE.md).
 
-La lista de provincias con agencia no está escrita en las consultas: vive en `cobertura_provincial`. La semilla propone Loja, El Oro, Zamora Chinchipe, Pichincha (incluye el Distrito Metropolitano de Quito), Santo Domingo de los Tsáchilas, Manabí, Chimborazo y Guayas. Quien administra parámetros puede activar o quitar cualquiera de las 24. El mapa encuadra el continente y deja Galápagos en un recuadro. Todavía no hay cantones ni registros de socios: el resumen real devuelve ceros.
+La lista de provincias con agencia no está escrita en las consultas: vive en `cobertura_provincial`. La semilla propone Loja, El Oro, Zamora Chinchipe, Pichincha (incluye el Distrito Metropolitano de Quito), Santo Domingo de los Tsáchilas, Manabí, Chimborazo y Guayas. Quien administra parámetros puede activar o quitar cualquiera de las 24. El mapa encuadra el continente y deja Galápagos en un recuadro.
+
+## Sprint 2: importación y concentración
+
+El contrato de columnas es una propuesta (`0.1.0-propuesto`, P-01) y vive en un solo módulo: `backend/app/modulos/importaciones/contrato.py`. El texto para stakeholders está en [`docs/contrato-columnas.md`](contrato-columnas.md). Cambiar un alias, un tipo o la obligatoriedad no exige tocar la clasificación.
+
+Estados del lote: `pendiente`, `ejecutandose`, `completado`, `finalizado_con_errores`, `cancelado`, `retirado`. Publicar pasa por `ejecutandose` dentro de la misma transacción y solo confirma `completado` si entraron todas las filas aceptadas y observadas. Si la inserción falla, no queda ninguna ubicación de ese intento. Cancelar solo vale antes de procesar. Retirar deja el archivo en `var/importaciones` (o `IMPORTACIONES_DIRECTORIO`) y el lote sale del índice. El diagrama guarda el hash en `resumen_criptografico` y no el binario: el archivo en disco cubre RF-05-2.
+
+`IntentoCarga.actor_id` apunta a `Usuario`. Una carga con el mismo SHA-256 no crea otro lote: crea un intento y devuelve el anterior.
+
+La regla de duplicados (P-04, lo mínimo de HU-50) también está centralizada. Un identificador repetido en el archivo o en un lote `completado` se rechaza. Dos identificadores distintos en el mismo cantón y en la misma celda de unos 5 m (`TAMANO_METROS`) quedan observados. El total del informe es aceptadas + observadas + rechazadas. `total_rechazadas` no es columna: el diagrama solo tiene procesadas, aceptadas y observadas, y el resto viaja en `observaciones`.
+
+El índice de concentración no es el índice de expansión. Densidad = registros publicados / agencias distintas de la provincia (mínimo 1). El índice normaliza esa densidad de 0 a 100 contra la provincia más densa del mismo resultado. La tendencia es la diferencia con el resultado vigente anterior y queda vacía si no había lote previo. Se persiste en `ResultadoAnalisis.indicadores` y una `ZonaAnalisis` por provincia con registros. `CapaTerritorial`, `VariableAnalitica` y `UsoVariableEjecucion` no se crearon: la versión de la capa es el identificador geoBoundaries y el índice no tiene variables configurables (P-05). Los campos marcados «Por definir» (`contrato_version`, `entradas`, `parametros`, `zona`, `metrica`) se guardan como texto o JSON.
+
+`/api/mapas/agregado` sigue sin posiciones de personas. `/api/mapas/calor` entrega centroides de una grilla de 0,01 grados y un peso, sin identificador de socio. El corredor, las señales y el índice de expansión de la interfaz siguen siendo ejemplo.
+
+La trazabilidad de historias, rutas y pruebas está en [`docs/sprint-2.md`](sprint-2.md).

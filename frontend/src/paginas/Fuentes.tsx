@@ -59,7 +59,11 @@ export function Fuentes() {
             Actualizar <Icono nombre="flecha" />
           </button>
         </div>
-        <p className="nota-inline">Este recorrido es el proceso previsto. Todavía no hay lotes de socios que lo alimenten.</p>
+        <p className="nota-inline">
+          {lotes === 0
+            ? "Este recorrido es el proceso previsto. Todavía no hay lotes de socios que lo alimenten."
+            : "Los lotes publicados alimentan la validación y el índice. Retirar un lote lo saca del análisis y conserva el archivo."}
+        </p>
         <div className="flow">
           {PASOS.map(([titulo, detalle], indice) => (
             <div key={titulo}>
@@ -104,7 +108,7 @@ export function Fuentes() {
           <div className="source-mark vacio">—</div>
           <div>
             <span>Registros de socios</span>
-            <h2>Sin lotes</h2>
+            <h2>{lotes === 0 ? "Sin lotes" : `${lotes} lotes`}</h2>
             <p>{notaImportacion || "Todavía no hay un archivo de socios cargado."}</p>
             <p>{lotes === 0 ? "0 lotes en el servidor." : `${lotes} lotes en el servidor.`}</p>
           </div>

@@ -35,13 +35,37 @@ export type Territorio = {
   provincias: ProvinciaTerritorio[];
 };
 
+export type ProvinciaResumen = {
+  codigo: string;
+  nombre: string;
+  nota: string | null;
+  registros: number;
+  cantones: [];
+  agencias?: number;
+  densidad?: number | null;
+  indice?: number | null;
+  tendencia?: number | null;
+};
+
+export type FilaRankingReal = {
+  codigo: string;
+  nombre: string;
+  registros: number;
+  agencias: number;
+  densidad: number;
+  indice: number;
+  tendencia: number | null;
+};
+
 export type ResumenReal = {
   total_registros: number;
   zonas_analizadas: number;
   alta_oportunidad: number;
   calidad_registros: number | null;
+  definicion_indice?: string;
   nota: string;
-  provincias: { codigo: string; nombre: string; nota: string | null; registros: number; cantones: [] }[];
+  provincias: ProvinciaResumen[];
+  ranking?: FilaRankingReal[];
 };
 
 let cache: Promise<Territorio> | null = null;
