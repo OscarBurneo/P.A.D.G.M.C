@@ -134,6 +134,10 @@ def _ejecutar(permiso: str, rol: str, ctx) -> object:
         return cliente.post("/api/analitica/ejemplo")
     if permiso == "importaciones.cargar":
         return cliente.get("/api/importaciones")
+    if permiso == "importaciones.publicar":
+        return cliente.post("/api/importaciones/00000000-0000-0000-0000-000000000000/publicar")
+    if permiso == "importaciones.retirar":
+        return cliente.post("/api/importaciones/00000000-0000-0000-0000-000000000000/retirar")
     if permiso == "validacion.consultar":
         return cliente.get("/api/validacion")
     raise AssertionError(permiso)
@@ -157,7 +161,9 @@ EXITOS = {
     "parametros.editar": {200},
     "analitica.ejemplo": {200},
     "importaciones.cargar": {200},
-    "validacion.consultar": {501},
+    "importaciones.publicar": {404},
+    "importaciones.retirar": {404},
+    "validacion.consultar": {200},
 }
 
 

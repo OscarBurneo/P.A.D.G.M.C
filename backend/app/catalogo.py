@@ -47,13 +47,25 @@ PERMISOS: tuple[tuple[str, str, str, str], ...] = (
         "importaciones.cargar",
         "Cargar importaciones",
         "importaciones",
-        "Reservado para la carga CSV/XLSX de un sprint posterior.",
+        "Selecciona un CSV o XLSX, revisa el lote y puede cancelarlo antes de publicarlo.",
+    ),
+    (
+        "importaciones.publicar",
+        "Publicar importaciones",
+        "importaciones",
+        "Confirma un lote pendiente y publica sus filas aceptadas y observadas en una sola transacción.",
+    ),
+    (
+        "importaciones.retirar",
+        "Retirar importaciones",
+        "importaciones",
+        "Retira un lote publicado del análisis sin borrar el archivo.",
     ),
     (
         "validacion.consultar",
         "Consultar validación",
         "validacion",
-        "Reservado para el informe de validación de un sprint posterior.",
+        "Consulta el informe de encabezados, estructura y clasificación de un lote.",
     ),
 )
 
