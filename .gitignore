@@ -52,3 +52,6 @@ dist/
 # Cobertura y evidencias locales
 htmlcov/
 .coverage
+
+# Archivos de importación (el hash queda en la base; los bytes no se versionan)
+/var/importaciones/

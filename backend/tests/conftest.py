@@ -21,6 +21,9 @@ os.environ["SESION_DURACION_MAXIMA_HORAS"] = "8"
 os.environ["CONTRASENA_LONGITUD_MINIMA"] = "10"
 os.environ["PROTEGER_ULTIMA_CUENTA_ADMIN"] = "true"
 os.environ["COOKIE_SAMESITE"] = "lax"
+os.environ["IMPORTACIONES_DIRECTORIO"] = "/tmp/padgmc-importaciones-prueba"
+
+import shutil
 
 import pytest
 from alembic.config import Config
@@ -69,17 +72,33 @@ def _preparar() -> None:
         sesion.execute(text("ALTER TABLE eventos_auditoria DISABLE TRIGGER auditoria_append_only"))
         sesion.execute(text("DELETE FROM eventos_auditoria"))
         sesion.execute(text("ALTER TABLE eventos_auditoria ENABLE TRIGGER auditoria_append_only"))
+        sesion.execute(text("DELETE FROM zonas_analisis"))
+        sesion.execute(text("DELETE FROM resultados_analisis"))
+        sesion.execute(text("DELETE FROM ejecuciones_analisis"))
+        sesion.execute(text("DELETE FROM catalogos_proceso"))
+        sesion.execute(text("DELETE FROM informes_validacion"))
+        sesion.execute(text("DELETE FROM intentos_carga"))
+        sesion.execute(text("DELETE FROM ubicaciones"))
+        sesion.execute(text("DELETE FROM lotes_importacion"))
         sesion.execute(text("DELETE FROM sesiones"))
         sesion.execute(text("DELETE FROM usuarios"))
         sesion.execute(text("DELETE FROM rol_permiso"))
         sesion.execute(text("DELETE FROM matrices_acceso"))
         sesion.execute(text("DELETE FROM parametros"))
-        sesion.execute(text("DELETE FROM ubicaciones"))
         sesion.execute(text("DELETE FROM cobertura_provincial"))
         sesion.commit()
         sembrar(sesion)
+        _limpiar_archivos()
     finally:
         sesion.close()
+
+
+def _limpiar_archivos() -> None:
+    from app.configuracion import ajustes
+
+    directorio = ajustes.directorio_importaciones
+    if directorio.exists():
+        shutil.rmtree(directorio, ignore_errors=True)
 
 
 @pytest.fixture

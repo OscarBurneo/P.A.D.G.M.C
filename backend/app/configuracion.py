@@ -50,6 +50,7 @@ class Ajustes(BaseSettings):
     argon2_parallelism: int = Field(default=2, ge=1, le=8)
     argon2_hash_len: int = Field(default=32, ge=16, le=64)
     argon2_salt_len: int = Field(default=16, ge=16, le=64)
+    importaciones_directorio: str = ""
 
     @property
     def cookie_es_segura(self) -> bool:
@@ -60,6 +61,12 @@ class Ajustes(BaseSettings):
     @property
     def origenes_cors(self) -> list[str]:
         return [origen.strip() for origen in self.cors_origenes.split(",") if origen.strip()]
+
+    @property
+    def directorio_importaciones(self) -> Path:
+        if self.importaciones_directorio.strip():
+            return Path(self.importaciones_directorio)
+        return RAIZ / "var" / "importaciones"
 
 
 @lru_cache
