@@ -35,7 +35,7 @@ El detalle está en [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md). Las fuentes 
 
 ## Arranque con Docker
 
-Hace falta Docker con Compose.
+Hace falta Docker con Compose v2. Los tres archivos de `infra/` se eligen con `-f`. No hace falta un perfil para el modo de un solo equipo, y un perfil tampoco podría dejar fuera servicios que ese modo siempre arranca. El detalle de la prueba con dos equipos está en [`docs/guia-prueba-red.md`](docs/guia-prueba-red.md).
 
 ```bash
 cp .env.example .env
@@ -43,13 +43,48 @@ cp .env.example .env
 
 Edite `.env` y ponga una `ADMIN_CONTRASENA` que no sea `cambiar-esto` (mínimo 10 caracteres, con letras y números) y un `POSTGRES_PASSWORD` distinto del ejemplo.
 
+### Un solo equipo
+
 ```bash
 docker compose --env-file .env -f infra/docker-compose.yml up --build
 ```
 
-Abra `http://localhost:8080`. La API queda detrás del mismo origen, en `/api`. En este modo el entorno debe seguir en `desarrollo`: HTTP local no es la entrega a usuarios finales. Para esa entrega use `ENTORNO=produccion` detrás de HTTPS.
+Abra `http://localhost:8080`. La API no se publica: Nginx atiende `/api` y lo reenvía a `http://api:8000` (o al valor de `API_UPSTREAM`). El navegador no usa una URL absoluta. En este modo el entorno debe seguir en `desarrollo`: HTTP local no es la entrega a usuarios finales. Para esa entrega use `ENTORNO=produccion` detrás de HTTPS. Este archivo sigue publicando Postgres en el puerto 5432 del anfitrión, para las herramientas locales.
 
 La imagen `postgis/postgis:16-3.4` no incluye h3-pg. El servicio arranca igual y `/api/salud` informa `h3_disponible: false`.
+
+### Solo base de datos y API
+
+Para el equipo que hospeda la API en la LAN. Postgres no publica puerto. La API queda en el puerto 8000. Este archivo fija `ENTORNO=desarrollo`, `COOKIE_SECURE=false` y `COOKIE_SAMESITE=lax`; esos tres valores del `.env` no se aplican aquí.
+
+```bash
+docker compose --env-file .env -f infra/docker-compose.backend.yml up --build
+```
+
+Compruebe `http://localhost:8000/api/salud` desde ese equipo y `http://IP_DE_ESE_EQUIPO:8000/api/salud` desde el otro.
+
+### Frontend Nginx en otro equipo
+
+Sirve el build ya compilado. `API_UPSTREAM` se lee al crear el contenedor. Cambiar la IP no pide `--build`; basta recrear el contenedor.
+
+```bash
+# En .env del equipo frontend, sin barra final:
+# API_UPSTREAM=http://192.168.1.20:8000
+docker compose --env-file .env -f infra/docker-compose.frontend.yml --profile nginx up --build -d
+```
+
+Abra `http://localhost:8080` en ese equipo, o `http://IP_DEL_EQUIPO_FRONTEND:8080` desde otro. El navegador llama a `/api` en ese mismo origen.
+
+### Frontend con recarga en caliente
+
+Vite dentro de Docker, con el código montado y `node_modules` en un volumen. El puerto es 5173, escucha en `0.0.0.0` y el proxy `/api` sale de `API_PROXY_TARGET`. En Docker Desktop (Windows y macOS) el sondeo (`CHOKIDAR_USEPOLLING=true`) hace falta para ver un cambio de archivo. La primera vez `npm ci` corre dentro del contenedor.
+
+```bash
+# API_PROXY_TARGET=http://192.168.1.20:8000
+docker compose --env-file .env -f infra/docker-compose.frontend.yml --profile vite up
+```
+
+Abra `http://IP_DEL_EQUIPO_FRONTEND:5173`. Guarde un cambio en `frontend/src` y la página se actualiza sin reconstruir una imagen. `npm run dev` en el anfitrión, fuera de Docker, sigue reenviando `/api` a `http://localhost:8000` si no exporta `API_PROXY_TARGET`.
 
 ## Arranque sin Docker
 
@@ -109,6 +144,6 @@ python backend/scripts/carga_autenticacion.py \
 | --- | --- |
 | `backend/` | API FastAPI, migraciones y pruebas |
 | `frontend/` | React, Vite y el mapa MapLibre |
-| `infra/` | Compose, imágenes y Nginx |
+| `infra/` | Compose de un equipo, de la API y del frontend; imágenes y Nginx |
 | `herramientas/` | Escáner de secretos |
 | `docs/` | Arquitectura y documentos fuente |

@@ -45,9 +45,27 @@ Esos tres contratos de autenticación no deben cambiar de ruta cuando entre un p
 - La cookie `padgmc_sesion` es `HttpOnly`, `SameSite=Lax` y `Secure` cuando `ENTORNO=produccion`.
 - Cerrar sesión marca la fila como revocada. Volver a enviar el mismo identificador recibe 401.
 - La inactividad propuesta es 30 minutos y la vida máxima, 8 horas, contadas desde la creación. La inactividad se lee en cada solicitud, así que un cambio de parámetro aplica en la siguiente. Ambos valores están **pendientes de aprobación**.
-- En producción, `POST /api/auth/iniciar-sesion` rechaza HTTP. Solo acepta el esquema `https` o, si `CONFIAR_PROXY=true`, el encabezado `X-Forwarded-Proto: https`. El Compose de desarrollo deja `ENTORNO=desarrollo` a propósito.
+- En producción, `POST /api/auth/iniciar-sesion` rechaza HTTP. Solo acepta el esquema `https` o, si `CONFIAR_PROXY=true`, el encabezado `X-Forwarded-Proto: https`. El Compose de un solo equipo toma `ENTORNO` del `.env` y debe quedarse en `desarrollo` mientras la entrada sea HTTP. El archivo del equipo backend fija `ENTORNO=desarrollo` por encima del `.env`.
 - Un fallo de acceso, una cuenta inexistente y una cuenta desactivada responden con el mismo texto: «Credenciales inválidas.» Si la cuenta no existe, igual se calcula un hash señuelo para no acortar el tiempo de respuesta.
 - La cuenta inicial sale de `ADMIN_IDENTIFICADOR`, `ADMIN_NOMBRE`, `ADMIN_CORREO` y `ADMIN_CONTRASENA`. El valor `cambiar-esto` no arranca.
+
+## Despliegue y sesión en la red del aula
+
+Hay tres archivos Compose, todos con la especificación que resuelve Compose v2 mediante `-f`. No usan `include` ni un perfil para partir el modo de un solo equipo. Un servicio sin `profiles` arranca en cualquier `up`, y un perfil no puede quitarlo. Si el frontend llevara perfil para poder dejarlo apagado, `docker compose up` dejaría de ser el modo de un solo equipo. Un segundo archivo tampoco puede borrar el `depends_on` de la API ni dejar de publicar un puerto: los puertos se suman. Por eso el corte es otro archivo, no un override.
+
+| Archivo | Qué levanta | Puertos en el anfitrión |
+| --- | --- | --- |
+| `infra/docker-compose.yml` | Postgres, API y Nginx | 5432 y 8080. La API solo existe en la red de Compose |
+| `infra/docker-compose.backend.yml` | Postgres y API | 8000. Postgres no se publica |
+| `infra/docker-compose.frontend.yml` | Nginx (`--profile nginx`) o Vite (`--profile vite`) | 8080 o 5173 |
+
+Cada archivo es su propio proyecto (`padgmc`, `padgmc-backend`, `padgmc-frontend`) y por tanto su propio volumen de datos. El paso a paso de la clase, las IP y el firewall están en [`guia-prueba-red.md`](guia-prueba-red.md).
+
+El navegador siempre pide `/api` al mismo origen que sirvió la página. Nginx o Vite reenvían esa ruta a la API. La cookie `padgmc_sesion` no lleva `Domain`: el navegador la asocia al host de la página, no al de la API. Con `SameSite=lax` y sin `Secure` (desarrollo, HTTP), esa cookie viaja en las peticiones del mismo sitio. `frontend/src/api.ts` arma la URL con `VITE_API_BASE ?? ""`. Vacío, la ruta `/api/...` es relativa. Si `VITE_API_BASE` apunta a la IP de otro equipo, la llamada cruza de sitio, el navegador no adjunta la cookie y la sesión se ve como 401. Ampliar `CORS_ORIGENES` no cambia esa regla: CORS autoriza a leer la respuesta, y `SameSite=lax` sigue sin enviar la cookie en ese `fetch`.
+
+`API_UPSTREAM` (Nginx) y `API_PROXY_TARGET` (Vite) son del proceso que hace de proxy, no del navegador. La imagen de Nginx es la oficial: al arrancar, `envsubst` sustituye `${API_UPSTREAM}` en `infra/nginx.conf.template`. El valor por defecto de la imagen y del modo de un solo equipo es `http://api:8000`, sin barra final, para que `/api/salud` siga llegando como `/api/salud`. Cambiar la IP recrea el contenedor y no recompila el frontend. Vite monta `frontend/` y guarda `node_modules` en un volumen, escucha en `0.0.0.0:5173` y, con `CHOKIDAR_USEPOLLING=true`, sondea el disco: en Docker Desktop los avisos de archivo no cruzan el bind mount. Si `HMR_HOST` está vacío, el websocket de recarga usa el mismo host con el que se abrió la página, así que una IP de la LAN funciona. `HMR_CLIENT_PORT` es el puerto que ve el navegador (5173).
+
+`CONFIAR_PROXY=true` hace que la API crea el `X-Forwarded-Proto` que manda Nginx. En desarrollo el inicio de sesión no exige HTTPS, así que el encabezado no decide el login. Con `ENTORNO=produccion` y ese proxy en HTTP, Nginx envía `X-Forwarded-Proto: http` y el login responde 400 (`https_requerido`). Quien llame al puerto 8000 directo y mande `X-Forwarded-Proto: https` haría que la API tratara la petición como HTTPS y marcara la cookie `Secure`, sin que exista TLS. Esta prueba no debe combinar `ENTORNO=produccion` y `CONFIAR_PROXY` sobre HTTP. La cookie, además, viaja en claro por la LAN: quien capture tráfico puede reutilizar `padgmc_sesion`. Sirve para el aula, no para datos reales de la cooperativa.
 
 ## Autorización
 
