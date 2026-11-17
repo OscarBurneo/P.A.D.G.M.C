@@ -133,7 +133,7 @@ describe("alta de cuentas", () => {
     await user.type(within(dialogo).getByLabelText("Identificador"), "ana.perez");
     await user.type(within(dialogo).getByLabelText("Nombre"), "Ana Pérez");
     await user.type(within(dialogo).getByLabelText("Correo"), "ana@ejemplo.com");
-    await user.type(within(dialogo).getByLabelText("Contraseña"), "Clave12345");
+    await user.type(within(dialogo).getByLabelText("Contraseña"), "ClaveSegura123");
     await user.click(within(dialogo).getByRole("button", { name: "Crear cuenta" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
@@ -148,7 +148,7 @@ describe("alta de cuentas", () => {
           identificador: "ana.perez",
           correo: "ana@ejemplo.com",
           nombre: "Ana Pérez",
-          contrasena: "Clave12345",
+          contrasena: "ClaveSegura123",
           rol_codigo: "usuario",
         }),
       }),
@@ -172,7 +172,7 @@ describe("alta de cuentas", () => {
     await user.type(within(dialogo).getByLabelText("Identificador"), "ana.perez");
     await user.type(within(dialogo).getByLabelText("Nombre"), "Ana Pérez");
     await user.type(within(dialogo).getByLabelText("Correo"), "ana@ejemplo.com");
-    await user.type(within(dialogo).getByLabelText("Contraseña"), "Clave12345");
+    await user.type(within(dialogo).getByLabelText("Contraseña"), "ClaveSegura123");
     await user.click(within(dialogo).getByRole("button", { name: "Crear cuenta" }));
 
     const alerta = await within(dialogo).findByRole("alert");
@@ -212,7 +212,7 @@ describe("alta de cuentas", () => {
     });
     await user.type(within(otraVez).getByLabelText("Nombre"), "Borrador");
     await user.type(within(otraVez).getByLabelText("Correo"), "borrador@ejemplo.com");
-    await user.type(within(otraVez).getByLabelText("Contraseña"), "Clave12345");
+    await user.type(within(otraVez).getByLabelText("Contraseña"), "ClaveSegura123");
     await user.click(within(otraVez).getByRole("button", { name: "Crear cuenta" }));
 
     expect(within(otraVez).getByRole("button", { name: "Creando cuenta…" })).toBeDisabled();
