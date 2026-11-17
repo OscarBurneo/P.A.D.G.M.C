@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
-import { cargarTerritorio, type ProvinciaTerritorio, type Territorio } from "../cobertura";
+import { cargarTerritorio, type ProvinciaTerritorio, type ResumenReal, type Territorio } from "../cobertura";
 import { Icono } from "../componentes/Icono";
 import { MapaEcuador, type CapasMapa } from "../componentes/MapaEcuador";
 import { resumenProvinciaEjemplo } from "../datos/ejemplo";
@@ -14,6 +14,8 @@ export function Mapa() {
   const [params, setParams] = useSearchParams();
   const [territorio, setTerritorio] = useState<Territorio | null>(null);
   const [celdas, setCeldas] = useState<{ longitud: number; latitud: number; peso: number }[]>([]);
+  const [resumen, setResumen] = useState<ResumenReal | null>(null);
+  const [datosListos, setDatosListos] = useState(false);
   const [error, setError] = useState("");
   const [densidad, setDensidad] = useState(true);
   const [registros, setRegistros] = useState(false);
@@ -25,9 +27,23 @@ export function Mapa() {
     void cargarTerritorio()
       .then(setTerritorio)
       .catch((causa: unknown) => setError(causa instanceof Error ? causa.message : "No se pudo cargar la cobertura."));
-    void api<{ celdas: { longitud: number; latitud: number; peso: number }[] }>("/api/mapas/calor")
-      .then((respuesta) => setCeldas(respuesta.celdas))
-      .catch(() => setCeldas([]));
+    let vigente = true;
+    void Promise.all([
+      api<{ celdas: { longitud: number; latitud: number; peso: number }[] }>("/api/mapas/calor").catch(() => ({
+        celdas: [],
+      })),
+      api<ResumenReal>("/api/mapas/resumen").catch(() => null),
+    ]).then(([calor, territorial]) => {
+      if (!vigente) {
+        return;
+      }
+      setCeldas(calor.celdas);
+      setResumen(territorial);
+      setDatosListos(true);
+    });
+    return () => {
+      vigente = false;
+    };
   }, []);
 
   const capas = useMemo<CapasMapa>(
@@ -51,15 +67,27 @@ export function Mapa() {
   const resto = provincias.filter((item) => !item.con_agencia);
   const elegida = provincias.find((item) => item.codigo === provincia) ?? null;
   const tira = (consulta ? conAgencia.filter((item) => item.nombre.toLocaleLowerCase("es").includes(consulta)) : conAgencia);
-  const muestra = ejemplo.activo && elegida ? resumenProvinciaEjemplo(elegida.codigo) : null;
+  const medidas = useMemo(() => medidasReales(resumen), [resumen]);
+  const hayDatosReales = celdas.length > 0 || (resumen?.total_registros ?? 0) > 0;
+  const vistaEjemplo = ejemplo.activo && datosListos && !hayDatosReales;
+  const real = elegida ? medidaPublicada(medidas, elegida.codigo) : null;
+  const muestra = !real && vistaEjemplo && elegida ? resumenProvinciaEjemplo(elegida.codigo) : null;
 
   useEffect(() => {
-    if (!elegida) {
+    if (!elegida || !datosListos) {
       return;
     }
-    const resumen = ejemplo.activo ? resumenProvinciaEjemplo(elegida.codigo) : null;
-    fijar(focoDesdeProvincia(elegida, resumen));
-  }, [elegida, ejemplo.activo, fijar]);
+    const publicada = medidaPublicada(medidas, elegida.codigo);
+    if (publicada) {
+      fijar(focoDesdeReal(elegida, publicada));
+      return;
+    }
+    if (ejemplo.activo && !hayDatosReales) {
+      fijar(focoDesdeProvincia(elegida, resumenProvinciaEjemplo(elegida.codigo)));
+      return;
+    }
+    fijar(focoSinRegistros(elegida));
+  }, [datosListos, ejemplo.activo, elegida, fijar, hayDatosReales, medidas]);
 
   return (
     <div className="map-workbench">
@@ -147,13 +175,21 @@ export function Mapa() {
           <span>Zona en foco</span>
           <strong>{elegida?.nombre ?? zona.zonaNombre ?? "Sin provincia en foco"}</strong>
           <p>
-            {elegida
-              ? muestra
-                ? `${muestra.socios.toLocaleString("es-EC")} potenciales socios de ejemplo · índice ${muestra.indice}`
-                : "Sin registros de potenciales socios."
-              : zona.provinciaNombre
-                ? "El foco viene de otra pantalla. Elija una provincia para encuadrar el atlas."
-                : "Elija una provincia. El encuadre inicial es el Ecuador continental y Galápagos va en el recuadro."}
+            {elegida ? (
+              real ? (
+                textoReal(real)
+              ) : muestra ? (
+                <>
+                  <em className="chip-ejemplo">Ejemplo</em> {textoEjemplo(muestra)}
+                </>
+              ) : (
+                "Sin registros publicados para esta provincia."
+              )
+            ) : zona.provinciaNombre ? (
+              "El foco viene de otra pantalla. Elija una provincia para encuadrar el atlas."
+            ) : (
+              "Elija una provincia. El encuadre inicial es el Ecuador continental y Galápagos va en el recuadro."
+            )}
           </p>
         </div>
       </div>
@@ -164,15 +200,24 @@ export function Mapa() {
           Ecuador
         </button>
         {tira.map((item) => {
-          const resumen = ejemplo.activo ? resumenProvinciaEjemplo(item.codigo) : null;
+          const publicada = medidaPublicada(medidas, item.codigo);
+          const ilustrativa = !publicada && vistaEjemplo ? resumenProvinciaEjemplo(item.codigo) : null;
+          const indice = publicada?.indice ?? ilustrativa?.indice;
           return (
             <button
               key={item.codigo}
               type="button"
               className={item.codigo === provincia ? "active" : ""}
+              aria-label={
+                publicada
+                  ? `${item.nombre}, ${publicada.registros} registros publicados, índice ${publicada.indice ?? "sin índice"}`
+                  : ilustrativa
+                    ? `${item.nombre}, índice de ejemplo ${ilustrativa.indice}`
+                    : `${item.nombre}, sin registros publicados`
+              }
               onClick={() => elegir(item.codigo)}
             >
-              <span>{resumen ? resumen.indice : "—"}</span>
+              <span>{indice ?? "—"}</span>
               {item.nombre}
             </button>
           );
@@ -205,10 +250,98 @@ export function Mapa() {
   );
 }
 
-function focoDesdeProvincia(
-  provincia: ProvinciaTerritorio,
-  muestra: { socios: number; indice: number; crecimiento: number; nivel: "Muy alta" | "Alta" | "Media" } | null,
-): FocoZona {
+type MedidaReal = {
+  registros: number;
+  indice: number | null;
+  tendencia: number | null;
+};
+
+type MuestraEjemplo = {
+  socios: number;
+  indice: number;
+  crecimiento: number;
+  nivel: "Muy alta" | "Alta" | "Media";
+};
+
+function medidasReales(resumen: ResumenReal | null) {
+  const medidas = new Map<string, MedidaReal>();
+  for (const provincia of resumen?.provincias ?? []) {
+    medidas.set(provincia.codigo, {
+      registros: provincia.registros,
+      indice: provincia.indice ?? null,
+      tendencia: provincia.tendencia ?? null,
+    });
+  }
+  for (const fila of resumen?.ranking ?? []) {
+    medidas.set(fila.codigo, {
+      registros: fila.registros,
+      indice: fila.indice,
+      tendencia: fila.tendencia,
+    });
+  }
+  return medidas;
+}
+
+function medidaPublicada(medidas: Map<string, MedidaReal>, codigo: string) {
+  const medida = medidas.get(codigo);
+  if (!medida || medida.registros <= 0) {
+    return null;
+  }
+  return medida;
+}
+
+function textoReal(medida: MedidaReal) {
+  const indice = medida.indice === null ? "sin índice" : `índice ${medida.indice}`;
+  const tendencia =
+    medida.tendencia === null ? "sin tendencia" : `tendencia ${medida.tendencia > 0 ? "+" : ""}${medida.tendencia}`;
+  return `${medida.registros.toLocaleString("es-EC")} registros publicados · ${indice} · ${tendencia}`;
+}
+
+function textoEjemplo(muestra: MuestraEjemplo) {
+  return `${muestra.socios.toLocaleString("es-EC")} potenciales socios de ejemplo · índice ${muestra.indice}`;
+}
+
+function centro(provincia: ProvinciaTerritorio) {
+  return {
+    lng: (provincia.bbox.oeste + provincia.bbox.este) / 2,
+    lat: (provincia.bbox.sur + provincia.bbox.norte) / 2,
+  };
+}
+
+function focoDesdeReal(provincia: ProvinciaTerritorio, medida: MedidaReal): FocoZona {
+  const punto = centro(provincia);
+  return {
+    provinciaCodigo: provincia.codigo,
+    provinciaNombre: provincia.nombre,
+    zonaNombre: provincia.nombre,
+    indice: medida.indice,
+    socios: medida.registros,
+    crecimiento: medida.tendencia,
+    nivel: null,
+    ejemplo: false,
+    lng: punto.lng,
+    lat: punto.lat,
+  };
+}
+
+function focoSinRegistros(provincia: ProvinciaTerritorio): FocoZona {
+  const punto = centro(provincia);
+  return {
+    provinciaCodigo: provincia.codigo,
+    provinciaNombre: provincia.nombre,
+    zonaNombre: provincia.nombre,
+    indice: null,
+    socios: null,
+    crecimiento: null,
+    nivel: null,
+    ejemplo: false,
+    lng: punto.lng,
+    lat: punto.lat,
+  };
+}
+
+function focoDesdeProvincia(provincia: ProvinciaTerritorio, muestra: MuestraEjemplo | null): FocoZona {
+  const punto = centro(provincia);
   return {
     provinciaCodigo: provincia.codigo,
     provinciaNombre: provincia.nombre,
@@ -218,7 +351,7 @@ function focoDesdeProvincia(
     crecimiento: muestra?.crecimiento ?? null,
     nivel: muestra?.nivel ?? null,
     ejemplo: Boolean(muestra),
-    lng: (provincia.bbox.oeste + provincia.bbox.este) / 2,
-    lat: (provincia.bbox.sur + provincia.bbox.norte) / 2,
+    lng: punto.lng,
+    lat: punto.lat,
   };
 }
