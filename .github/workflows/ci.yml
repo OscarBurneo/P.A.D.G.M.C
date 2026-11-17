@@ -54,6 +54,9 @@ jobs:
       - name: Comprobación de tipos
         working-directory: frontend
         run: npm run typecheck
+      - name: Pruebas
+        working-directory: frontend
+        run: npm test
       - name: Compilación
         working-directory: frontend
         run: npm run build
