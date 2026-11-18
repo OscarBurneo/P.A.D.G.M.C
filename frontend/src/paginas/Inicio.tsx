@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
-import { type ResumenReal } from "../cobertura";
+import { type FilaRankingReal, type ResumenReal } from "../cobertura";
 import { Icono } from "../componentes/Icono";
 import {
   CALIDAD_EJEMPLO,
@@ -22,6 +22,8 @@ type Lote = {
   nombre?: string;
   fuente?: string;
   validos?: number;
+  observadas?: number;
+  rechazadas?: number;
   invalidos?: number;
   actualizado_en?: string;
   estado?: string;
@@ -61,14 +63,20 @@ export function Inicio() {
       .catch((causa: unknown) => setErrorLotes(causa instanceof Error ? causa.message : "No se pudo leer los lotes."));
   }, [puedeLotes]);
 
+  const rankingReal = useMemo(() => {
+    return (resumen?.ranking ?? [])
+      .filter((fila) => !consulta || fila.nombre.toLocaleLowerCase("es").includes(consulta))
+      .slice(0, TOP_RANKING);
+  }, [consulta, resumen]);
+  const mostrarEjemploRanking = ejemplo.activo && rankingReal.length === 0 && (resumen?.total_registros ?? 0) === 0;
   const ranking = useMemo(() => {
-    if (!ejemplo.activo) {
+    if (!mostrarEjemploRanking) {
       return [];
     }
     return rankingProvinciasEjemplo()
       .filter((fila) => !consulta || fila.nombre.toLocaleLowerCase("es").includes(consulta))
       .slice(0, TOP_RANKING);
-  }, [consulta, ejemplo.activo]);
+  }, [consulta, mostrarEjemploRanking]);
   const ruta = useMemo(
     () => [...CANTONES_EJEMPLO].sort((a, b) => b.indice - a.indice).slice(0, 3),
     [],
@@ -125,40 +133,73 @@ export function Inicio() {
         <div className="panel-title">
           <div>
             <span>Ranking</span>
-            <h2>Provincias con mayor oportunidad</h2>
+            <h2>Provincias con mayor concentración</h2>
           </div>
-          {ejemplo.activo ? <em className="chip-ejemplo">Ejemplo</em> : null}
+          {mostrarEjemploRanking ? <em className="chip-ejemplo">Ejemplo</em> : null}
         </div>
-        {ejemplo.activo ? (
-          ranking.length > 0 ? (
-            <ol className="ranking-lista">
-              {ranking.map((fila, posicion) => (
-                <li key={fila.codigo}>
-                  {puedeMapa ? (
-                    <Link className="ranking-fila" to={`/mapa?provincia=${encodeURIComponent(fila.codigo)}`}>
-                      <FilaRanking posicion={posicion} nombre={fila.nombre} indice={fila.indice} crecimiento={fila.crecimiento} socios={fila.socios} />
-                    </Link>
-                  ) : (
-                    <div className="ranking-fila">
-                      <FilaRanking posicion={posicion} nombre={fila.nombre} indice={fila.indice} crecimiento={fila.crecimiento} socios={fila.socios} />
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <div className="empty-state">
-              <strong>Ninguna provincia coincide</strong>
-              <span>Pruebe otro texto en el buscador.</span>
-            </div>
-          )
+        {rankingReal.length > 0 ? (
+          <ol className="ranking-lista">
+            {rankingReal.map((fila, posicion) => (
+              <li key={fila.codigo}>
+                {puedeMapa ? (
+                  <Link className="ranking-fila" to={`/mapa?provincia=${encodeURIComponent(fila.codigo)}`}>
+                    <FilaRanking
+                      posicion={posicion}
+                      nombre={fila.nombre}
+                      indice={fila.indice}
+                      detalle={`${formatoEntero(fila.registros)} registros`}
+                      tendencia={textoTendencia(fila.tendencia)}
+                    />
+                  </Link>
+                ) : (
+                  <div className="ranking-fila">
+                    <FilaRanking
+                      posicion={posicion}
+                      nombre={fila.nombre}
+                      indice={fila.indice}
+                      detalle={`${formatoEntero(fila.registros)} registros`}
+                      tendencia={textoTendencia(fila.tendencia)}
+                    />
+                  </div>
+                )}
+              </li>
+            ))}
+          </ol>
+        ) : mostrarEjemploRanking && ranking.length > 0 ? (
+          <ol className="ranking-lista">
+            {ranking.map((fila, posicion) => (
+              <li key={fila.codigo}>
+                {puedeMapa ? (
+                  <Link className="ranking-fila" to={`/mapa?provincia=${encodeURIComponent(fila.codigo)}`}>
+                    <FilaRanking
+                      posicion={posicion}
+                      nombre={fila.nombre}
+                      indice={fila.indice}
+                      detalle={`${formatoEntero(fila.socios)} ilustrativos`}
+                      tendencia={`${fila.crecimiento > 0 ? "+" : ""}${fila.crecimiento} %`}
+                    />
+                  </Link>
+                ) : (
+                  <div className="ranking-fila">
+                    <FilaRanking
+                      posicion={posicion}
+                      nombre={fila.nombre}
+                      indice={fila.indice}
+                      detalle={`${formatoEntero(fila.socios)} ilustrativos`}
+                      tendencia={`${fila.crecimiento > 0 ? "+" : ""}${fila.crecimiento} %`}
+                    />
+                  </div>
+                )}
+              </li>
+            ))}
+          </ol>
         ) : (
           <div className="empty-state">
-            <strong>Sin ranking de oportunidad</strong>
+            <strong>{consulta ? "Ninguna provincia coincide" : "Sin ranking de concentración"}</strong>
             <span>
-              {resumen
-                ? `${resumen.provincias.length} provincias con agencia y ${formatoEntero(resumen.total_registros)} registros. El resumen no trae índice ni tendencia.`
-                : "El resumen no trae índice ni tendencia por provincia."}
+              {consulta
+                ? "Pruebe otro texto en el buscador."
+                : resumen?.definicion_indice ?? "Publique un lote para ordenar las provincias por registros y agencia."}
             </span>
           </div>
         )}
@@ -240,26 +281,32 @@ export function Inicio() {
   );
 }
 
+function textoTendencia(tendencia: FilaRankingReal["tendencia"]) {
+  if (tendencia === null || tendencia === undefined) {
+    return "sin lote anterior";
+  }
+  return `${tendencia > 0 ? "+" : ""}${tendencia}`;
+}
+
 function FilaRanking({
   posicion,
   nombre,
   indice,
-  crecimiento,
-  socios,
+  detalle,
+  tendencia,
 }: {
   posicion: number;
   nombre: string;
   indice: number;
-  crecimiento: number;
-  socios: number;
+  detalle: string;
+  tendencia: string;
 }) {
-  const tendencia = `${crecimiento > 0 ? "+" : ""}${crecimiento} %`;
   return (
     <>
       <span className="ranking-puesto">{String(posicion + 1).padStart(2, "0")}</span>
       <span>
         <b>{nombre}</b>
-        <small>{formatoEntero(socios)} ilustrativos</small>
+        <small>{detalle}</small>
       </span>
       <span className="ranking-valor">
         {indice}
@@ -307,11 +354,11 @@ function EstadoDatos({
             <dd>Cantones ilustrativos, no un archivo</dd>
           </div>
           <div>
-            <dt>Válidos</dt>
+            <dt>Válidas</dt>
             <dd>—</dd>
           </div>
           <div>
-            <dt>Inválidos</dt>
+            <dt>Observadas</dt>
             <dd>—</dd>
           </div>
           <div>
@@ -334,16 +381,26 @@ function EstadoDatos({
             <dd>{lote.fuente ?? "—"}</dd>
           </div>
           <div>
-            <dt>Válidos</dt>
+            <dt>Válidas</dt>
             <dd>{lote.validos === undefined ? "—" : formatoEntero(lote.validos)}</dd>
           </div>
           <div>
-            <dt>Inválidos</dt>
-            <dd>{lote.invalidos === undefined ? "—" : formatoEntero(lote.invalidos)}</dd>
+            <dt>Observadas</dt>
+            <dd>
+              {lote.observadas === undefined
+                ? lote.invalidos === undefined
+                  ? "—"
+                  : formatoEntero(lote.invalidos)
+                : `${formatoEntero(lote.observadas)}${lote.rechazadas === undefined ? "" : ` · ${formatoEntero(lote.rechazadas)} rechazadas`}`}
+            </dd>
           </div>
           <div>
             <dt>Actualización</dt>
-            <dd>{lote.actualizado_en ? new Date(lote.actualizado_en).toLocaleString("es-EC") : "—"}</dd>
+            <dd>
+              {lote.actualizado_en
+                ? new Date(lote.actualizado_en).toLocaleString("es-EC", { dateStyle: "short", timeStyle: "short" })
+                : "—"}
+            </dd>
           </div>
           <div>
             <dt>Estado</dt>
@@ -356,14 +413,14 @@ function EstadoDatos({
           <span>
             {!puedeLotes
               ? "Su rol no consulta las importaciones."
-              : nota || "No hay lotes. La API no entrega nombre, válidos, inválidos, fecha ni estado."}
+              : nota || "No hay lotes importados."}
           </span>
         </div>
       )}
       <p className="nota-capa">
         {mostrarEjemplo
           ? `${formatoEntero(sociosEjemplo())} registros ilustrativos en ${CANTONES_EJEMPLO.length} cantones. No hay conteo de válidos, inválidos ni fecha de carga.`
-          : "Pendiente: un lote con nombre, fuente, válidos, inválidos, fecha y estado. Hoy /api/importaciones solo devuelve la lista vacía."}
+          : "El último lote muestra nombre, fuente, válidas, observadas, rechazadas, fecha y estado."}
       </p>
     </article>
   );

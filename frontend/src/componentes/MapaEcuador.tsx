@@ -70,6 +70,7 @@ export function MapaEcuador({
   modo = "calor",
   capas,
   ejemplo,
+  celdas = [],
   provincia,
   onProvincia,
   mostrarAviso = true,
@@ -78,6 +79,7 @@ export function MapaEcuador({
   modo?: Modo;
   capas?: CapasMapa;
   ejemplo: boolean;
+  celdas?: { longitud: number; latitud: number; peso: number }[];
   provincia: string | null;
   onProvincia?: (codigo: string) => void;
   mostrarAviso?: boolean;
@@ -306,22 +308,33 @@ export function MapaEcuador({
         })),
       };
       (mapa.getSource("provincias") as maplibregl.GeoJSONSource | undefined)?.setData(coleccion);
-      const muestras: GeoJSON.FeatureCollection = ejemplo
+      const reales = celdas.length > 0;
+      const maximo = Math.max(1, ...celdas.map((celda) => celda.peso));
+      const muestras: GeoJSON.FeatureCollection = reales
         ? {
             type: "FeatureCollection",
-            features: CANTONES_EJEMPLO.map((canton) => ({
+            features: celdas.map((celda) => ({
               type: "Feature",
-              properties: {
-                nombre: canton.nombre,
-                peso: Math.min(1, canton.socios / 420),
-              },
-              geometry: { type: "Point", coordinates: [canton.lng, canton.lat] },
+              properties: { peso: celda.peso / maximo },
+              geometry: { type: "Point", coordinates: [celda.longitud, celda.latitud] },
             })),
           }
-        : VACIO;
+        : ejemplo
+          ? {
+              type: "FeatureCollection",
+              features: CANTONES_EJEMPLO.map((canton) => ({
+                type: "Feature",
+                properties: {
+                  nombre: canton.nombre,
+                  peso: Math.min(1, canton.socios / 420),
+                },
+                geometry: { type: "Point", coordinates: [canton.lng, canton.lat] },
+              })),
+            }
+          : VACIO;
       (mapa.getSource("muestras") as maplibregl.GeoJSONSource | undefined)?.setData(muestras);
-      mapa.setLayoutProperty("calor", "visibility", ejemplo && densidad ? "visible" : "none");
-      mapa.setLayoutProperty("circulos", "visibility", ejemplo && registros ? "visible" : "none");
+      mapa.setLayoutProperty("calor", "visibility", densidad && (reales || ejemplo) ? "visible" : "none");
+      mapa.setLayoutProperty("circulos", "visibility", !reales && ejemplo && registros ? "visible" : "none");
       mapa.setPaintProperty("relleno", "fill-color", agencias ? RELLENO_CON_AGENCIA : RELLENO_SIN_CAPA);
       mapa.setPaintProperty("linea", "line-color", agencias ? LINEA_CON_AGENCIA : LINEA_SIN_CAPA);
       mapa.removeFeatureState({ source: "provincias" });
@@ -349,7 +362,7 @@ export function MapaEcuador({
     return () => {
       mapa.off("load", intentar);
     };
-  }, [territorio, ejemplo, provincia, densidad, registros, agencias]);
+  }, [territorio, ejemplo, celdas, provincia, densidad, registros, agencias]);
 
   useEffect(() => {
     if (!recuadro.current || !territorio?.recuadro_galapagos) {
@@ -421,8 +434,8 @@ export function MapaEcuador({
           OpenStreetMap contributors
         </a>
       </p>
-      {ejemplo ? <p className="chip-ejemplo mapa-chip">Capa de ejemplo</p> : null}
-      {mostrarAviso && !ejemplo ? (
+      {ejemplo && celdas.length === 0 ? <p className="chip-ejemplo mapa-chip">Capa de ejemplo</p> : null}
+      {mostrarAviso && !ejemplo && celdas.length === 0 ? (
         <p className="aviso-mapa">Sin registros para calcular concentración. Los límites provinciales sí están cargados.</p>
       ) : null}
       {error ? <p className="error mapa-error">{error}</p> : null}

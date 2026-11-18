@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { api } from "../api";
 import { cargarTerritorio, type ProvinciaTerritorio, type Territorio } from "../cobertura";
 import { Icono } from "../componentes/Icono";
 import { MapaEcuador, type CapasMapa } from "../componentes/MapaEcuador";
@@ -12,6 +13,7 @@ export function Mapa() {
   const { zona, fijar, limpiar } = useFoco();
   const [params, setParams] = useSearchParams();
   const [territorio, setTerritorio] = useState<Territorio | null>(null);
+  const [celdas, setCeldas] = useState<{ longitud: number; latitud: number; peso: number }[]>([]);
   const [error, setError] = useState("");
   const [densidad, setDensidad] = useState(true);
   const [registros, setRegistros] = useState(false);
@@ -23,6 +25,9 @@ export function Mapa() {
     void cargarTerritorio()
       .then(setTerritorio)
       .catch((causa: unknown) => setError(causa instanceof Error ? causa.message : "No se pudo cargar la cobertura."));
+    void api<{ celdas: { longitud: number; latitud: number; peso: number }[] }>("/api/mapas/calor")
+      .then((respuesta) => setCeldas(respuesta.celdas))
+      .catch(() => setCeldas([]));
   }, []);
 
   const capas = useMemo<CapasMapa>(
@@ -74,7 +79,7 @@ export function Mapa() {
           <i>{registros ? <Icono nombre="check" /> : null}</i>
           <span>
             <b>Registros</b>
-            {ejemplo.activo ? "Puntos ilustrativos, no son socios" : "Sin coordenadas de socios"}
+            {ejemplo.activo && celdas.length === 0 ? "Puntos ilustrativos, no son socios" : "Celdas agregadas, sin identificar personas"}
           </span>
         </button>
         <button type="button" className={agencias ? "active" : ""} aria-pressed={agencias} onClick={() => setAgencias((valor) => !valor)}>
@@ -113,9 +118,11 @@ export function Mapa() {
         </label>
         <p id="nota-canton" className="nota-capa">
           El filtro de cantón queda visible y desactivado: no hay límites cantonales cargados.
-          {!ejemplo.activo
+          {!ejemplo.activo && celdas.length === 0
             ? " Densidad y registros no tienen coordenadas reales que dibujar."
-            : " La capa encendida es ilustrativa, no son socios."}
+            : celdas.length > 0
+              ? " La capa de calor usa los lotes publicados, agrupados en una grilla."
+              : " La capa encendida es ilustrativa, no son socios."}
           {elegida?.nota ? ` ${elegida.nota}` : ""}
           {elegida?.es_galapagos ? " Galápagos se consulta en el recuadro, sin cambiar el encuadre continental." : ""}
         </p>
@@ -131,6 +138,7 @@ export function Mapa() {
           modo="calor"
           capas={capas}
           ejemplo={ejemplo.activo}
+          celdas={celdas}
           provincia={elegida?.es_galapagos ? null : provincia}
           mostrarAviso={false}
           onProvincia={(codigo) => elegir(codigo)}
@@ -183,7 +191,7 @@ export function Mapa() {
           <span className="muestra seleccion" /> Provincia seleccionada
         </p>
         <p>
-          <span className="muestra calor" /> {ejemplo.activo ? "Calor de ejemplo, de bajo a alto" : "Sin capa de calor real"}
+          <span className="muestra calor" /> {celdas.length > 0 ? "Calor de lotes publicados, de bajo a alto" : ejemplo.activo ? "Calor de ejemplo, de bajo a alto" : "Sin capa de calor real"}
         </p>
       </div>
       {territorio ? (

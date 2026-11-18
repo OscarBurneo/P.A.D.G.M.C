@@ -5,23 +5,35 @@ coordenadas individuales ni identificadores de socios.
 """
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.dependencias import exige, obtener_db
 from app.modelos import Usuario
-from app.modulos.cobertura.servicio import resumen_vacio
+from app.modulos.mapas.consulta import calor, resumen
 
 router = APIRouter(prefix="/api/mapas", tags=["mapas"])
 
-_NOTA = (
-    "No hay registros de socios en el Sprint 0. Esta respuesta no incluye coordenadas individuales ni datos personales."
-)
+_NOTA = "Esta respuesta no incluye la posición de cada socio ni datos personales."
 
 
 @router.get("/agregado")
-def agregado(_: Usuario = Depends(exige("mapas.ver"))) -> dict:
+def agregado(
+    _: Usuario = Depends(exige("mapas.ver")),
+    db: Session = Depends(obtener_db),
+) -> dict:
+    total = db.execute(
+        text(
+            """
+            SELECT count(*)
+            FROM ubicaciones u
+            JOIN lotes_importacion l ON l.id = u.lote_id
+            WHERE l.estado = 'completado'
+            """
+        )
+    ).scalar()
     return {
-        "total_registros": 0,
+        "total_registros": int(total or 0),
         "celdas_h3": [],
         "resolucion_h3": None,
         "nota": _NOTA,
@@ -29,11 +41,19 @@ def agregado(_: Usuario = Depends(exige("mapas.ver"))) -> dict:
 
 
 @router.get("/resumen")
-def resumen(
+def resumen_mapa(
     _: Usuario = Depends(exige("mapas.ver")),
     db: Session = Depends(obtener_db),
 ) -> dict:
-    return resumen_vacio(db)
+    return resumen(db)
+
+
+@router.get("/calor")
+def calor_mapa(
+    _: Usuario = Depends(exige("mapas.ver")),
+    db: Session = Depends(obtener_db),
+) -> dict:
+    return calor(db)
 
 
 @router.get("/detalle")

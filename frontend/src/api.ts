@@ -28,7 +28,7 @@ const base = import.meta.env.VITE_API_BASE ?? "";
 
 export async function api<T>(ruta: string, opciones: RequestInit = {}): Promise<T> {
   const encabezados = new Headers(opciones.headers);
-  if (opciones.body && !encabezados.has("Content-Type")) {
+  if (opciones.body && !(opciones.body instanceof FormData) && !encabezados.has("Content-Type")) {
     encabezados.set("Content-Type", "application/json");
   }
   const respuesta = await fetch(`${base}${ruta}`, {

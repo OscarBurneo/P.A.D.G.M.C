@@ -3,7 +3,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -168,3 +168,139 @@ class MatrizAcceso(Base):
     descripcion: Mapped[str] = mapped_column(Text, nullable=False)
     contenido: Mapped[dict] = mapped_column(JSONB, nullable=False)
     creada_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_ahora)
+
+
+class Ubicacion(Base):
+    """Punto publicado. La geometría se lee y escribe con SQL, como el límite provincial."""
+
+    __tablename__ = "ubicaciones"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_id)
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_ahora)
+    lote_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("lotes_importacion.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    atributos_socio: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+
+class LoteImportacion(Base):
+    __tablename__ = "lotes_importacion"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_id)
+    nombre_archivo: Mapped[str] = mapped_column(String(240), nullable=False)
+    formato: Mapped[str] = mapped_column(String(8), nullable=False)
+    estado: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    fecha: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_ahora, index=True)
+    actor_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    resumen_criptografico: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    contrato_version: Mapped[str] = mapped_column(String(40), nullable=False)
+
+
+class IntentoCarga(Base):
+    __tablename__ = "intentos_carga"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_id)
+    lote_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("lotes_importacion.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    actor_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    fecha: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_ahora)
+    nombre_archivo: Mapped[str] = mapped_column(String(240), nullable=False)
+    resumen_criptografico: Mapped[str] = mapped_column(String(64), nullable=False)
+    estado: Mapped[str] = mapped_column(String(40), nullable=False)
+    resultado: Mapped[str] = mapped_column(String(40), nullable=False)
+
+
+class InformeValidacion(Base):
+    __tablename__ = "informes_validacion"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_id)
+    lote_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("lotes_importacion.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+    )
+    total_procesadas: Mapped[int] = mapped_column(Integer, nullable=False)
+    total_aceptadas: Mapped[int] = mapped_column(Integer, nullable=False)
+    total_observadas: Mapped[int] = mapped_column(Integer, nullable=False)
+    observaciones: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+
+class CatalogoProceso(Base):
+    __tablename__ = "catalogos_proceso"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_id)
+    codigo: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
+    nombre: Mapped[str] = mapped_column(String(160), nullable=False)
+    version: Mapped[str] = mapped_column(String(40), nullable=False)
+    habilitado: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    entradas: Mapped[dict] = mapped_column(JSONB, nullable=False)
+
+
+class EjecucionAnalisis(Base):
+    __tablename__ = "ejecuciones_analisis"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_id)
+    proceso_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("catalogos_proceso.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    actor_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    fecha: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_ahora)
+    estado: Mapped[str] = mapped_column(String(40), nullable=False)
+    version_datos: Mapped[str] = mapped_column(String(120), nullable=False)
+    version_configuracion: Mapped[str] = mapped_column(String(40), nullable=False)
+    version_catalogo: Mapped[str] = mapped_column(String(40), nullable=False)
+    version_capa_territorial: Mapped[str] = mapped_column(String(80), nullable=False)
+    parametros: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    motivo_fallo: Mapped[str | None] = mapped_column(String(400), nullable=True)
+
+
+class ResultadoAnalisis(Base):
+    __tablename__ = "resultados_analisis"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_id)
+    ejecucion_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("ejecuciones_analisis.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    indicadores: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    vigente: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+
+
+class ZonaAnalisis(Base):
+    __tablename__ = "zonas_analisis"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_id)
+    resultado_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("resultados_analisis.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    zona: Mapped[str] = mapped_column(String(80), nullable=False)
+    metrica: Mapped[str] = mapped_column(String(80), nullable=False)
+    valor: Mapped[float | None] = mapped_column(Numeric(14, 4), nullable=True)
+    tipo: Mapped[str] = mapped_column(String(40), nullable=False)

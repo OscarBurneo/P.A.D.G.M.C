@@ -221,7 +221,7 @@ export function Disposicion({ children }: { children: ReactNode }) {
               </div>
             ) : (
               <p className="nota ejemplo-off">
-                Sin registros de socios. Los indicadores quedan vacíos.
+                Datos reales. El corredor, las señales y el índice de expansión siguen como ejemplo.
                 <button type="button" className="secundario" onClick={() => ejemplo.cambiar(true)}>
                   Mostrar vista de ejemplo
                 </button>

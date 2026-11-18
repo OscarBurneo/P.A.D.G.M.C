@@ -4,7 +4,7 @@ Plataforma web de análisis de datos geoespaciales con mapas de calor para la **
 
 El documento de visión usa también la sigla P.A.D.M.C. En este repositorio el nombre del producto es **P.A.D.G.M.C**.
 
-El eje de la solución es **datos + geolocalización + mapas de calor**. El Sprint 0 deja lista la puerta de entrada: sesión, roles, permisos y auditoría. Esta rama suma el tablero y la cobertura nacional. La importación de socios y la predicción siguen pendientes.
+El eje de la solución es **datos + geolocalización + mapas de calor**. El Sprint 0 deja lista la puerta de entrada: sesión, roles, permisos y auditoría. Esta rama suma el tablero, la cobertura nacional y la importación de socios con un contrato de columnas todavía propuesto. La predicción sigue fuera del MVP.
 
 El nombre visible por defecto es **GeoOportunidades**. Se cambia con `NOMBRE_PRODUCTO` y `SUBTITULO_PRODUCTO` en el entorno; `/api/salud` se lo entrega a la interfaz. El ícono (SVG y PNG de 16 a 1024 px, para una app de escritorio futura) está en [`assets/marca/`](assets/marca/).
 
@@ -14,7 +14,13 @@ La cooperativa no opera solo en Loja. La configuración inicial marca agencia en
 
 Los límites provinciales vienen de geoBoundaries gbOpen, Ecuador ADM1, en EPSG:4326. La licencia declarada de ese archivo es **CC0 1.0**. Fuente, cita y URL: [`backend/app/recursos/geografia/FUENTE.md`](backend/app/recursos/geografia/FUENTE.md). El mapa abre sobre el Ecuador continental y muestra Galápagos en un recuadro.
 
-Mientras no haya socios importados, el resumen real está en cero. La interfaz puede mostrar una vista de ejemplo, marcada como tal.
+Mientras no haya un lote publicado, el resumen real está en cero y la interfaz puede mostrar una vista de ejemplo, marcada como tal. Con lotes en estado completado, el ranking y la capa de calor usan esos registros. El corredor, las señales y el índice de expansión siguen siendo ejemplo.
+
+## Sprint 2
+
+Historias: HU-07, HU-08, HU-09, HU-10, HU-11, HU-12, HU-13, HU-14, HU-16, HU-22, HU-29, HU-30, HU-49, HU-51 y HU-52. De arrastre, HU-46, HU-64 y HU-67 solo suman auditoría, una medición de la carga y pruebas trazables del módulo de importación.
+
+El contrato de columnas es una propuesta fácil de cambiar: [`docs/contrato-columnas.md`](docs/contrato-columnas.md) y las plantillas en [`docs/plantillas/`](docs/plantillas/). La traza de cada historia está en [`docs/sprint-2.md`](docs/sprint-2.md). El detalle de módulos está en [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md).
 
 ## Sprint 0
 
