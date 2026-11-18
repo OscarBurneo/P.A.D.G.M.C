@@ -1,0 +1,55 @@
+# Equipo backend de la prueba en LAN: solo Postgres y la API.
+# Postgres no publica puerto. La API escucha en 0.0.0.0:8000 del anfitrión.
+# ENTORNO y la cookie quedan fijos para HTTP. No use este archivo con
+# ENTORNO=produccion: el valor de abajo gana al de .env a propósito.
+# Mantenga el servicio api alineado con infra/docker-compose.yml.
+
+name: padgmc-backend
+
+services:
+  base-datos:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-padgmc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD en .env}
+      POSTGRES_DB: ${POSTGRES_DB:-padgmc}
+    volumes:
+      - datos_pg:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/01-postgis.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.api
+    env_file:
+      - ../.env
+    environment:
+      BASE_DATOS_URL: postgresql+psycopg://${POSTGRES_USER:-padgmc}:${POSTGRES_PASSWORD}@base-datos:5432/${POSTGRES_DB:-padgmc}
+      ENTORNO: desarrollo
+      CONFIAR_PROXY: "true"
+      COOKIE_SECURE: "false"
+      COOKIE_SAMESITE: lax
+    ports:
+      - "8000:8000"
+    depends_on:
+      base-datos:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/salud')",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  datos_pg:
