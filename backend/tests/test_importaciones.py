@@ -256,6 +256,92 @@ def test_hu51_publicacion_sin_resultados_parciales(admin: TestClient, db: Sessio
     assert total == 2
 
 
+def test_rnf31_cancelado_se_vuelve_a_cargar_y_se_puede_publicar(admin: TestClient, db: Session) -> None:
+    contenido = _csv([_fila("SOC-R31")])
+    primero = _cargar(admin, contenido)
+    cancelado = admin.post(f"/api/importaciones/{primero['id']}/cancelar")
+    assert cancelado.status_code == 200
+    assert cancelado.json()["estado_codigo"] == "cancelado"
+    segundo = _cargar(admin, contenido)
+    assert segundo["repetido"] is False
+    assert segundo["id"] != primero["id"]
+    assert segundo["estado_codigo"] == "pendiente"
+    publicado = admin.post(f"/api/importaciones/{segundo['id']}/publicar")
+    assert publicado.status_code == 200, publicado.text
+    assert publicado.json()["estado_codigo"] == "completado"
+    assert publicado.json()["id"] == segundo["id"]
+    db.rollback()
+    estados = db.execute(text("SELECT estado FROM lotes_importacion ORDER BY fecha")).scalars().all()
+    assert estados == ["cancelado", "completado"]
+    hashes = db.execute(text("SELECT count(DISTINCT resumen_criptografico) FROM lotes_importacion")).scalar()
+    assert hashes == 1
+
+
+def test_rnf31_completado_sigue_devolviendo_el_lote_previo(admin: TestClient, db: Session) -> None:
+    contenido = _csv([_fila("SOC-R31B")])
+    primero = _cargar(admin, contenido)
+    publicado = admin.post(f"/api/importaciones/{primero['id']}/publicar")
+    assert publicado.status_code == 200, publicado.text
+    segundo = _cargar(admin, contenido)
+    assert segundo["repetido"] is True
+    assert segundo["id"] == primero["id"]
+    assert segundo["estado_codigo"] == "completado"
+    assert segundo["intentos"] == 2
+    db.rollback()
+    assert db.execute(text("SELECT count(*) FROM lotes_importacion")).scalar() == 1
+    assert db.execute(text("SELECT count(*) FROM intentos_carga")).scalar() == 2
+
+
+def test_rnf31_finalizado_con_errores_sigue_siendo_idempotente(admin: TestClient, db: Session) -> None:
+    contenido = b"nombre,canton\nAna,Loja\n"
+    primero = _cargar(admin, contenido, "corto-rnf.csv")
+    assert primero["estado_codigo"] == "finalizado_con_errores"
+    segundo = _cargar(admin, contenido, "corto-rnf.csv")
+    assert segundo["repetido"] is True
+    assert segundo["id"] == primero["id"]
+    db.rollback()
+    assert db.execute(text("SELECT count(*) FROM lotes_importacion")).scalar() == 1
+
+
+def test_rnf31_retirado_abre_un_lote_nuevo(admin: TestClient, db: Session) -> None:
+    """Retirado no conserva la idempotencia.
+
+    El lote ya no cuenta en el análisis y publicar exige un pendiente, igual que
+    un cancelado. El mismo SHA-256 abre un lote nuevo. No hay UNIQUE sobre el
+    hash: solo el índice ix_lotes_importacion_resumen.
+    """
+    contenido = _csv([_fila("SOC-R31C")])
+    primero = _cargar(admin, contenido)
+    assert admin.post(f"/api/importaciones/{primero['id']}/publicar").status_code == 200
+    retirado = admin.post(f"/api/importaciones/{primero['id']}/retirar", json={"motivo": "Reemplazo de la carga"})
+    assert retirado.status_code == 200, retirado.text
+    assert retirado.json()["estado_codigo"] == "retirado"
+    segundo = _cargar(admin, contenido)
+    assert segundo["repetido"] is False
+    assert segundo["id"] != primero["id"]
+    assert segundo["estado_codigo"] == "pendiente"
+    publicado = admin.post(f"/api/importaciones/{segundo['id']}/publicar")
+    assert publicado.status_code == 200, publicado.text
+    assert publicado.json()["estado_codigo"] == "completado"
+    definiciones = (
+        db.execute(
+            text(
+                """
+            SELECT indexdef
+            FROM pg_indexes
+            WHERE schemaname = 'public'
+              AND tablename = 'lotes_importacion'
+              AND indexdef ILIKE '%resumen_criptografico%'
+            """
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert definiciones
+    assert all("UNIQUE" not in definicion.upper() for definicion in definiciones)
+
+
 def test_carga_identica_devuelve_el_lote_previo(admin: TestClient, db: Session) -> None:
     contenido = _csv([_fila("SOC-700")])
     primero = _cargar(admin, contenido)

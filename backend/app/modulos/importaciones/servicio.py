@@ -43,6 +43,14 @@ _NOTA = (
     f"({VERSION_CONTRATO}) y puede cambiar después de la reunión con los stakeholders."
 )
 
+# RNF-31: el mismo SHA-256 no abre otro lote solo si el previo sigue vigente.
+# Pendiente, en publicación, completado o finalizado con errores se devuelve tal cual.
+# Cancelado no se procesó y publicar responde 409, así que el archivo puede cargarse de nuevo.
+# Retirado tampoco conserva la idempotencia: ya salió del análisis y no se puede republicar.
+# No hay UNIQUE sobre resumen_criptografico (solo ix_lotes_importacion_resumen), de modo que
+# un lote cancelado o retirado puede convivir con uno nuevo del mismo hash.
+_ESTADOS_IDEMPOTENTES = frozenset({PENDIENTE, EJECUTANDOSE, COMPLETADO, FINALIZADO_CON_ERRORES})
+
 
 def listar(db: Session) -> dict:
     lotes = db.scalars(select(LoteImportacion).order_by(LoteImportacion.fecha.desc())).all()
@@ -75,7 +83,10 @@ def recibir(
     visible = _nombre_visible(nombre)
     previo = db.scalar(
         select(LoteImportacion)
-        .where(LoteImportacion.resumen_criptografico == resumen)
+        .where(
+            LoteImportacion.resumen_criptografico == resumen,
+            LoteImportacion.estado.in_(_ESTADOS_IDEMPOTENTES),
+        )
         .order_by(LoteImportacion.fecha.desc())
         .limit(1)
     )

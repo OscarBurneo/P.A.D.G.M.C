@@ -3,7 +3,7 @@ import { NavLink, useLocation, useSearchParams } from "react-router-dom";
 import { Icono } from "./componentes/Icono";
 import { Logo } from "./componentes/Logo";
 import { useEjemplo } from "./ejemplo";
-import { useFoco } from "./foco";
+import { type FocoZona, useFoco } from "./foco";
 import { formatoCoordenadas, iniciales } from "./formato";
 import { useMarca } from "./marca";
 import { CAPITULOS, EXTRAS, NOTAS_BITACORA, type Capitulo, type PaginaExtra } from "./navegacion";
@@ -322,9 +322,7 @@ function Bitacora({
               <p className="foco-vacio">Sin índice. No hay registros para esta zona.</p>
             )}
             <p>
-              {zona.socios !== null ? `${zona.socios.toLocaleString("es-EC")} potenciales socios` : "Sin potenciales socios"}
-              {zona.crecimiento !== null ? ` · ${zona.crecimiento > 0 ? "+" : ""}${zona.crecimiento}% de crecimiento` : ""}
-              {zona.ejemplo ? " (vista de ejemplo)" : ""}
+              {textoCifras(zona)}
             </p>
             {destino ? (
               <NavLink to={destino}>
@@ -357,6 +355,23 @@ function Bitacora({
       </button>
     </aside>
   );
+}
+
+function textoCifras(zona: FocoZona) {
+  if (zona.ejemplo) {
+    const socios = zona.socios !== null ? `${zona.socios.toLocaleString("es-EC")} potenciales socios` : "Sin potenciales socios";
+    const crecimiento =
+      zona.crecimiento !== null ? ` · ${zona.crecimiento > 0 ? "+" : ""}${zona.crecimiento}% de crecimiento` : "";
+    return `${socios}${crecimiento} (vista de ejemplo)`;
+  }
+  const registros = zona.socios !== null ? `${zona.socios.toLocaleString("es-EC")} registros publicados` : "Sin registros publicados";
+  const tendencia =
+    zona.crecimiento !== null
+      ? ` · tendencia ${zona.crecimiento > 0 ? "+" : ""}${zona.crecimiento}`
+      : zona.indice !== null
+        ? " · sin tendencia"
+        : "";
+  return `${registros}${tendencia}`;
 }
 
 function Buscador() {
