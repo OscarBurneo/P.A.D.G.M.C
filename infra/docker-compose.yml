@@ -1,3 +1,10 @@
+# Un solo equipo: base de datos, API y el frontend Nginx en el puerto 8080.
+# La API no se publica. El navegador habla con el mismo origen y Nginx
+# reenvía /api a http://api:8000, salvo que API_UPSTREAM diga otra cosa.
+# La prueba con dos equipos usa docker-compose.backend.yml y
+# docker-compose.frontend.yml. Un perfil no puede apagar los servicios que
+# este archivo siempre levanta; por eso van en archivos distintos.
+
 name: padgmc
 
 services:
@@ -46,6 +53,8 @@ services:
     build:
       context: ..
       dockerfile: infra/Dockerfile.frontend
+    environment:
+      API_UPSTREAM: ${API_UPSTREAM:-http://api:8000}
     ports:
       - "8080:80"
     depends_on:
