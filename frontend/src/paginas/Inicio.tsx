@@ -1,16 +1,13 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
-import { cargarTerritorio, type ResumenReal, type Territorio } from "../cobertura";
-import { Dona } from "../componentes/Dona";
+import { type ResumenReal } from "../cobertura";
 import { Icono } from "../componentes/Icono";
-import { Sparkline } from "../componentes/Sparkline";
-import { TablaZonas, type FilaZona } from "../componentes/TablaZonas";
 import {
   CALIDAD_EJEMPLO,
   CANTONES_EJEMPLO,
-  COLORES_SERIE,
-  SERIES_EJEMPLO,
+  indiceMedioEjemplo,
+  rankingProvinciasEjemplo,
   sociosEjemplo,
   zonasAltas,
 } from "../datos/ejemplo";
@@ -18,24 +15,30 @@ import { useEjemplo } from "../ejemplo";
 import { formatoEntero, formatoNumero } from "../formato";
 import { puede, useSesion } from "../sesion";
 
-const MapaEcuador = lazy(() => import("../componentes/MapaEcuador").then((modulo) => ({ default: modulo.MapaEcuador })));
+const TOP_RANKING = 5;
 
-type Modo = "calor" | "puntos";
-type Corte = "provincia" | "canton";
+type Lote = {
+  id?: string;
+  nombre?: string;
+  fuente?: string;
+  validos?: number;
+  invalidos?: number;
+  actualizado_en?: string;
+  estado?: string;
+};
 
 export function Inicio() {
   const { cuenta } = useSesion();
   const ejemplo = useEjemplo();
   const [params] = useSearchParams();
-  const [modo, setModo] = useState<Modo>("calor");
-  const [corte, setCorte] = useState<Corte>("provincia");
   const [resumen, setResumen] = useState<ResumenReal | null>(null);
-  const [territorio, setTerritorio] = useState<Territorio | null>(null);
   const [error, setError] = useState("");
-  const navigate = useNavigate();
-  const consulta = (params.get("q") ?? "").trim().toLocaleLowerCase("es");
-  const puedeImportar = puede(cuenta, "importaciones.cargar");
+  const [lotes, setLotes] = useState<Lote[] | null>(null);
+  const [notaLotes, setNotaLotes] = useState("");
+  const [errorLotes, setErrorLotes] = useState("");
   const puedeMapa = puede(cuenta, "mapas.ver");
+  const puedeLotes = puede(cuenta, "importaciones.cargar");
+  const consulta = (params.get("q") ?? "").trim().toLocaleLowerCase("es");
 
   useEffect(() => {
     if (!puedeMapa) {
@@ -44,260 +47,324 @@ export function Inicio() {
     void api<ResumenReal>("/api/mapas/resumen")
       .then(setResumen)
       .catch((causa: unknown) => setError(causa instanceof Error ? causa.message : "No se pudo leer el resumen."));
-    void cargarTerritorio().then(setTerritorio).catch(() => undefined);
   }, [puedeMapa]);
 
-  const filas = useMemo(() => filasVisibles(ejemplo.activo, resumen, consulta), [ejemplo.activo, resumen, consulta]);
-  const partes = useMemo(() => partesDona(ejemplo.activo, resumen, corte), [ejemplo.activo, resumen, corte]);
-  const provinciaMapa =
-    consulta && territorio
-      ? (territorio.provincias.find(
-          (item) => !item.es_galapagos && item.nombre.toLocaleLowerCase("es").includes(consulta),
-        )?.codigo ?? null)
-      : null;
+  useEffect(() => {
+    if (!puedeLotes) {
+      return;
+    }
+    void api<{ lotes: Lote[]; nota: string }>("/api/importaciones")
+      .then((respuesta) => {
+        setLotes(respuesta.lotes);
+        setNotaLotes(respuesta.nota);
+      })
+      .catch((causa: unknown) => setErrorLotes(causa instanceof Error ? causa.message : "No se pudo leer los lotes."));
+  }, [puedeLotes]);
+
+  const ranking = useMemo(() => {
+    if (!ejemplo.activo) {
+      return [];
+    }
+    return rankingProvinciasEjemplo()
+      .filter((fila) => !consulta || fila.nombre.toLocaleLowerCase("es").includes(consulta))
+      .slice(0, TOP_RANKING);
+  }, [consulta, ejemplo.activo]);
+  const ruta = useMemo(
+    () => [...CANTONES_EJEMPLO].sort((a, b) => b.indice - a.indice).slice(0, 3),
+    [],
+  );
+  const mayor = useMemo(
+    () => [...CANTONES_EJEMPLO].sort((a, b) => b.crecimiento - a.crecimiento)[0],
+    [],
+  );
+
+  const indice = ejemplo.activo ? indiceMedioEjemplo() : null;
+  const socios = ejemplo.activo ? sociosEjemplo() : resumen?.total_registros;
+  const zonas = ejemplo.activo ? CANTONES_EJEMPLO.length : resumen?.zonas_analizadas;
+  const calidad = ejemplo.activo ? CALIDAD_EJEMPLO : (resumen?.calidad_registros ?? null);
 
   return (
-    <section className="tablero">
-      <header className="encabezado-pagina">
-        <div>
-          <p className="sobrelinea">Inteligencia territorial</p>
-          <h1>Resumen geoespacial</h1>
-          <p className="lead">
-            Monitoree la concentración de potenciales socios en las provincias con agencia e identifique zonas de oportunidad.
-          </p>
+    <div className="summary-layout">
+      {error ? <p className="error span-completo">{error}</p> : null}
+      <article className="pulse-panel">
+        <span className="eyebrow">Índice de expansión</span>
+        {ejemplo.activo ? <em className="chip-ejemplo">Ejemplo</em> : null}
+        <div className={`pulse-score ${indice === null ? "vacio" : ""}`}>
+          {indice === null ? "Sin índice" : indice}
+          {indice !== null ? <small>/100</small> : null}
         </div>
-        <div className="acciones-pagina">
-          <label>
-            Periodo
-            <select defaultValue="30" aria-describedby="nota-periodo">
-              <option value="30">Últimos 30 días</option>
-              <option value="90" disabled>
-                Últimos 90 días (requiere registros)
-              </option>
-            </select>
-          </label>
-          <p id="nota-periodo" className="sr">
-            El periodo no cambia cifras reales porque todavía no hay cargas.
-          </p>
-          {puedeImportar ? (
-            <Link className="boton" to="/importar">
-              <Icono nombre="importar" /> Importar CSV
-            </Link>
-          ) : null}
-        </div>
-      </header>
-      {error ? <p className="error">{error}</p> : null}
-      {!ejemplo.activo ? (
-        <p className="nota">
-          No hay registros de socios para calcular indicadores.
-          <button type="button" className="secundario" onClick={() => ejemplo.cambiar(true)}>
-            Mostrar datos de ejemplo
-          </button>
+        <p>
+          {ejemplo.activo
+            ? "Promedio ilustrativo de los cantones de la vista de ejemplo, sobre la cobertura nacional. No es una medición de la cooperativa."
+            : (resumen?.nota ?? "Sin registros de socios para calcular el índice de expansión.")}
         </p>
-      ) : null}
-      <div className="kpis">
-        <Kpi
-          icono="personas"
-          titulo="Potenciales socios"
-          valor={ejemplo.activo ? formatoEntero(sociosEjemplo()) : "0"}
-          detalle={ejemplo.activo ? "+12,4 % vs. periodo anterior" : "Sin registros importados"}
-          serie={ejemplo.activo ? SERIES_EJEMPLO.socios : [0, 0, 0, 0]}
-          color="#2F92C5"
-          ejemplo={ejemplo.activo}
-        />
-        <Kpi
-          icono="pin"
-          titulo="Zonas analizadas"
-          valor={ejemplo.activo ? formatoEntero(CANTONES_EJEMPLO.length) : "0"}
-          detalle={ejemplo.activo ? "Cantones de la vista de ejemplo" : "Sin zonas con registros"}
-          serie={ejemplo.activo ? SERIES_EJEMPLO.zonas : [0, 0, 0, 0]}
-          color="#5EA9D2"
-          ejemplo={ejemplo.activo}
-        />
-        <Kpi
-          icono="diana"
-          titulo="Alta oportunidad"
-          valor={ejemplo.activo ? formatoEntero(zonasAltas()) : "0"}
-          detalle={ejemplo.activo ? "Nivel alto o muy alto, de ejemplo" : "Sin índice calculado"}
-          serie={ejemplo.activo ? SERIES_EJEMPLO.alta : [0, 0, 0, 0]}
-          color="#0067AF"
-          ejemplo={ejemplo.activo}
-        />
-        <Kpi
-          icono="calidad"
-          titulo="Calidad de datos"
-          valor={ejemplo.activo ? `${formatoNumero(CALIDAD_EJEMPLO)} %` : "—"}
-          detalle={ejemplo.activo ? "Porcentaje ilustrativo de registros válidos" : "Sin registros válidos"}
-          serie={ejemplo.activo ? SERIES_EJEMPLO.calidad : [0, 0, 0, 0]}
-          color="#0A6B40"
-          ejemplo={ejemplo.activo}
-        />
-      </div>
-      <div className="panel-medio">
-        <article className="tarjeta">
-          <header className="tarjeta-cabecera">
-            <div>
-              <p className="etiqueta">Distribución geográfica</p>
-              <h2>Concentración de potenciales socios</h2>
-            </div>
-            <div className="segmento" role="group" aria-label="Tipo de capa">
-              <button type="button" aria-pressed={modo === "calor"} onClick={() => setModo("calor")}>
-                Calor
-              </button>
-              <button type="button" aria-pressed={modo === "puntos"} onClick={() => setModo("puntos")}>
-                Puntos
-              </button>
-            </div>
-          </header>
-          {puedeMapa ? (
-            <Suspense fallback={<p className="estado">Cargando el mapa del Ecuador…</p>}>
-              <MapaEcuador
-                compacto
-                modo={modo}
-                ejemplo={ejemplo.activo}
-                provincia={provinciaMapa}
-                onProvincia={(codigo) => navigate(`/mapa?provincia=${encodeURIComponent(codigo)}`)}
-              />
-            </Suspense>
-          ) : (
-            <p className="nota">Su rol no incluye el mapa agregado.</p>
-          )}
-          <footer className="tarjeta-pie">
-            <span>{ejemplo.activo ? "Capa ilustrativa sobre límites reales" : "Límites provinciales, sin capa de calor"}</span>
-            {puedeMapa ? <Link to="/mapa">Explorar mapa completo</Link> : null}
-          </footer>
-        </article>
-        <article className="tarjeta">
-          <header className="tarjeta-cabecera">
-            <div>
-              <p className="etiqueta">Composición</p>
-              <h2>{corte === "provincia" ? "Distribución por provincia" : "Distribución por cantón"}</h2>
-            </div>
-            <div className="segmento" role="group" aria-label="Agrupación de la dona">
-              <button type="button" aria-pressed={corte === "provincia"} onClick={() => setCorte("provincia")}>
-                Provincia
-              </button>
-              <button type="button" aria-pressed={corte === "canton"} onClick={() => setCorte("canton")}>
-                Cantón
-              </button>
-            </div>
-          </header>
-          <Dona
-            partes={partes}
-            tituloTotal={corte === "provincia" ? "Distribución de ejemplo por provincia" : "Distribución de ejemplo por cantón"}
-            vacio={resumen?.nota ?? "Sin registros para distribuir."}
-          />
-          <footer className="tarjeta-pie">
-            <span>{ejemplo.activo ? "Porcentajes de la vista de ejemplo" : "La cobertura real sigue en cero"}</span>
-            <Link to="/oportunidades">Ver reporte detallado</Link>
-          </footer>
-        </article>
-      </div>
-      <article className="tarjeta">
-        <header className="tarjeta-cabecera">
-          <div>
-            <p className="etiqueta">Priorización comercial</p>
-            <h2>Zonas con mayor oportunidad</h2>
-          </div>
-          <Link to="/oportunidades">Ver todas</Link>
-        </header>
-        <TablaZonas filas={filas} />
+        <div className="pulse-strip">
+          <span>
+            <b>{socios === undefined ? "—" : formatoEntero(socios)}</b>
+            potenciales socios
+          </span>
+          <span>
+            <b>{zonas === undefined ? "—" : formatoEntero(zonas)}</b>
+            zonas analizadas
+          </span>
+          <span>
+            <b>{calidad === null ? "—" : `${formatoNumero(calidad)} %`}</b>
+            datos válidos
+          </span>
+        </div>
+        {puedeMapa ? (
+          <Link className="pulse-action" to="/oportunidades">
+            Priorizar zonas <Icono nombre="flecha" />
+          </Link>
+        ) : (
+          <p className="foco-vacio">Su rol no incluye la priorización.</p>
+        )}
       </article>
-    </section>
+
+      <article className="panel ranking-panel">
+        <div className="panel-title">
+          <div>
+            <span>Ranking</span>
+            <h2>Provincias con mayor oportunidad</h2>
+          </div>
+          {ejemplo.activo ? <em className="chip-ejemplo">Ejemplo</em> : null}
+        </div>
+        {ejemplo.activo ? (
+          ranking.length > 0 ? (
+            <ol className="ranking-lista">
+              {ranking.map((fila, posicion) => (
+                <li key={fila.codigo}>
+                  {puedeMapa ? (
+                    <Link className="ranking-fila" to={`/mapa?provincia=${encodeURIComponent(fila.codigo)}`}>
+                      <FilaRanking posicion={posicion} nombre={fila.nombre} indice={fila.indice} crecimiento={fila.crecimiento} socios={fila.socios} />
+                    </Link>
+                  ) : (
+                    <div className="ranking-fila">
+                      <FilaRanking posicion={posicion} nombre={fila.nombre} indice={fila.indice} crecimiento={fila.crecimiento} socios={fila.socios} />
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <div className="empty-state">
+              <strong>Ninguna provincia coincide</strong>
+              <span>Pruebe otro texto en el buscador.</span>
+            </div>
+          )
+        ) : (
+          <div className="empty-state">
+            <strong>Sin ranking de oportunidad</strong>
+            <span>
+              {resumen
+                ? `${resumen.provincias.length} provincias con agencia y ${formatoEntero(resumen.total_registros)} registros. El resumen no trae índice ni tendencia.`
+                : "El resumen no trae índice ni tendencia por provincia."}
+            </span>
+          </div>
+        )}
+      </article>
+      <EstadoDatos
+        ejemplo={ejemplo.activo}
+        puedeLotes={puedeLotes}
+        lotes={lotes}
+        nota={notaLotes}
+        error={errorLotes}
+      />
+
+      <article className="panel signal-panel">
+        <div className="panel-title compact">
+          <div>
+            <span>Señales</span>
+            <h2>Cambios detectados</h2>
+          </div>
+          <Icono nombre="actividad" />
+        </div>
+        {ejemplo.activo && mayor ? (
+          <>
+            <p className="nota-inline">
+              <em className="chip-ejemplo">Ejemplo</em>
+            </p>
+            <div className="signal">
+              <b>+{mayor.crecimiento}%</b>
+              <p>{mayor.nombre} tiene el mayor crecimiento de la vista de ejemplo.</p>
+            </div>
+            <div className="signal">
+              <b>{zonasAltas()}</b>
+              <p>Zonas de nivel alto o muy alto en la vista de ejemplo.</p>
+            </div>
+            <div className="signal">
+              <b>—</b>
+              <p>No hay un conteo de geocodificación manual: no existen lotes.</p>
+            </div>
+          </>
+        ) : (
+          <div className="empty-state">
+            <strong>Sin señales</strong>
+            <span>No hay registros para detectar cambios de concentración.</span>
+          </div>
+        )}
+      </article>
+
+      <article className="panel corridor-panel">
+        <div className="panel-title compact">
+          <div>
+            <span>Corredor sugerido</span>
+            <h2>Ruta comercial prioritaria</h2>
+          </div>
+          <Icono nombre="radar" />
+        </div>
+        {ejemplo.activo && ruta.length === 3 ? (
+          <>
+            <p className="nota-inline">
+              <em className="chip-ejemplo">Ejemplo</em> Esquema entre los tres cantones de mayor índice ilustrativo. No es una ruta calculada.
+            </p>
+            <svg viewBox="0 0 320 150" role="img" aria-label={`Corredor de ejemplo entre ${ruta.map((item) => item.nombre).join(", ")}`}>
+              <path className="corridor-shadow" d="M30 112 C78 88, 93 70, 154 72 S236 35, 286 34" />
+              <path className="corridor-line" d="M30 112 C78 88, 93 70, 154 72 S236 35, 286 34" />
+              <circle cx="30" cy="112" r="8" />
+              <circle cx="154" cy="72" r="12" />
+              <circle cx="286" cy="34" r="9" />
+              <text x="18" y="139">{ruta[2]?.nombre}</text>
+              <text x="124" y="104">{ruta[0]?.nombre}</text>
+              <text x="214" y="20">{ruta[1]?.nombre}</text>
+            </svg>
+          </>
+        ) : (
+          <div className="empty-state">
+            <strong>Sin corredor sugerido</strong>
+            <span>No hay registros para trazar una ruta comercial.</span>
+          </div>
+        )}
+      </article>
+    </div>
   );
 }
 
-function Kpi({
-  icono,
-  titulo,
-  valor,
-  detalle,
-  serie,
-  color,
-  ejemplo,
+function FilaRanking({
+  posicion,
+  nombre,
+  indice,
+  crecimiento,
+  socios,
 }: {
-  icono: "personas" | "pin" | "diana" | "calidad";
-  titulo: string;
-  valor: string;
-  detalle: string;
-  serie: number[];
-  color: string;
-  ejemplo: boolean;
+  posicion: number;
+  nombre: string;
+  indice: number;
+  crecimiento: number;
+  socios: number;
 }) {
+  const tendencia = `${crecimiento > 0 ? "+" : ""}${crecimiento} %`;
   return (
-    <article className="kpi">
-      <div className="kpi-titulo">
-        <span className="kpi-icono">
-          <Icono nombre={icono} />
-        </span>
-        <h2>{titulo}</h2>
-        {ejemplo ? <span className="chip-ejemplo">Ejemplo</span> : null}
+    <>
+      <span className="ranking-puesto">{String(posicion + 1).padStart(2, "0")}</span>
+      <span>
+        <b>{nombre}</b>
+        <small>{formatoEntero(socios)} ilustrativos</small>
+      </span>
+      <span className="ranking-valor">
+        {indice}
+        <span>{tendencia}</span>
+      </span>
+    </>
+  );
+}
+
+function EstadoDatos({
+  ejemplo,
+  puedeLotes,
+  lotes,
+  nota,
+  error,
+}: {
+  ejemplo: boolean;
+  puedeLotes: boolean;
+  lotes: Lote[] | null;
+  nota: string;
+  error: string;
+}) {
+  const lote = lotes?.[0];
+  const hayLote = Boolean(lote);
+  const mostrarEjemplo = ejemplo && !hayLote;
+
+  return (
+    <article className="panel estado-datos">
+      <div className="panel-title">
+        <div>
+          <span>Estado de los datos</span>
+          <h2>Último lote</h2>
+        </div>
+        {mostrarEjemplo ? <em className="chip-ejemplo">Ejemplo</em> : null}
       </div>
-      <Sparkline valores={serie} color={color} />
-      <p className="valor">{valor}</p>
-      <p className="detalle">{detalle}</p>
+      {error ? <p className="error">{error}</p> : null}
+      {mostrarEjemplo ? (
+        <dl>
+          <div>
+            <dt>Lote</dt>
+            <dd>Vista de ejemplo</dd>
+          </div>
+          <div>
+            <dt>Fuente</dt>
+            <dd>Cantones ilustrativos, no un archivo</dd>
+          </div>
+          <div>
+            <dt>Válidos</dt>
+            <dd>—</dd>
+          </div>
+          <div>
+            <dt>Inválidos</dt>
+            <dd>—</dd>
+          </div>
+          <div>
+            <dt>Actualización</dt>
+            <dd>—</dd>
+          </div>
+          <div>
+            <dt>Estado</dt>
+            <dd>No es un lote</dd>
+          </div>
+        </dl>
+      ) : hayLote && lote ? (
+        <dl>
+          <div>
+            <dt>Lote</dt>
+            <dd>{lote.nombre ?? "Sin nombre"}</dd>
+          </div>
+          <div>
+            <dt>Fuente</dt>
+            <dd>{lote.fuente ?? "—"}</dd>
+          </div>
+          <div>
+            <dt>Válidos</dt>
+            <dd>{lote.validos === undefined ? "—" : formatoEntero(lote.validos)}</dd>
+          </div>
+          <div>
+            <dt>Inválidos</dt>
+            <dd>{lote.invalidos === undefined ? "—" : formatoEntero(lote.invalidos)}</dd>
+          </div>
+          <div>
+            <dt>Actualización</dt>
+            <dd>{lote.actualizado_en ? new Date(lote.actualizado_en).toLocaleString("es-EC") : "—"}</dd>
+          </div>
+          <div>
+            <dt>Estado</dt>
+            <dd>{lote.estado ?? "—"}</dd>
+          </div>
+        </dl>
+      ) : (
+        <div className="empty-state">
+          <strong>Sin lote cargado</strong>
+          <span>
+            {!puedeLotes
+              ? "Su rol no consulta las importaciones."
+              : nota || "No hay lotes. La API no entrega nombre, válidos, inválidos, fecha ni estado."}
+          </span>
+        </div>
+      )}
+      <p className="nota-capa">
+        {mostrarEjemplo
+          ? `${formatoEntero(sociosEjemplo())} registros ilustrativos en ${CANTONES_EJEMPLO.length} cantones. No hay conteo de válidos, inválidos ni fecha de carga.`
+          : "Pendiente: un lote con nombre, fuente, válidos, inválidos, fecha y estado. Hoy /api/importaciones solo devuelve la lista vacía."}
+      </p>
     </article>
   );
 }
-
-function filasVisibles(ejemplo: boolean, resumen: ResumenReal | null, consulta: string): FilaZona[] {
-  if (ejemplo) {
-    return CANTONES_EJEMPLO.filter((canton) => coincide(consulta, canton.provincia, canton.nombre, canton.nivel))
-      .slice()
-      .sort((a, b) => b.indice - a.indice)
-      .map((canton) => ({
-        codigo: canton.codigoProvincia,
-        provincia: canton.provincia,
-        canton: canton.nombre,
-        socios: canton.socios,
-        indice: canton.indice,
-        crecimiento: canton.crecimiento,
-        nivel: canton.nivel,
-      }));
-  }
-  return (resumen?.provincias ?? [])
-    .filter((provincia) => coincide(consulta, provincia.nombre))
-    .map((provincia) => ({
-      codigo: provincia.codigo,
-      provincia: provincia.nombre,
-      canton: "Sin cantones con registros",
-      socios: null,
-      indice: null,
-      crecimiento: null,
-      nivel: null,
-    }));
-}
-
-function partesDona(ejemplo: boolean, resumen: ResumenReal | null, corte: Corte) {
-  if (!ejemplo) {
-    return (resumen?.provincias ?? []).map((provincia, indice) => ({
-      nombre: provincia.nombre,
-      valor: 0,
-      color: COLORES_SERIE[indice % COLORES_SERIE.length],
-    }));
-  }
-  if (corte === "canton") {
-    return CANTONES_EJEMPLO.map((canton, indice) => ({
-      nombre: canton.nombre,
-      valor: canton.socios,
-      color: COLORES_SERIE[indice % COLORES_SERIE.length],
-    }));
-  }
-  const acumulado = new Map<string, number>();
-  for (const canton of CANTONES_EJEMPLO) {
-    acumulado.set(canton.provincia, (acumulado.get(canton.provincia) ?? 0) + canton.socios);
-  }
-  return [...acumulado.entries()].map(([nombre, valor], indice) => ({
-    nombre,
-    valor,
-    color: COLORES_SERIE[indice % COLORES_SERIE.length],
-  }));
-}
-
-function coincide(consulta: string, ...textos: string[]) {
-  if (!consulta) {
-    return true;
-  }
-  return textos.some((texto) => texto.toLocaleLowerCase("es").includes(consulta));
-}
-

@@ -17,7 +17,18 @@ export type NombreIcono =
   | "diana"
   | "calidad"
   | "salir"
-  | "menu";
+  | "menu"
+  | "cerrar"
+  | "flecha"
+  | "capas"
+  | "actividad"
+  | "radar"
+  | "candado"
+  | "check"
+  | "archivo"
+  | "filtro"
+  | "bitacora"
+  | "edificio";
 
 const TRAZOS: Record<NombreIcono, string> = {
   resumen: "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z",
@@ -39,6 +50,17 @@ const TRAZOS: Record<NombreIcono, string> = {
   calidad: "M7 4.5h8l4 4V19.5H7zM9 13.5l2 2 4-4.5",
   salir: "M10 5H6.5A1.5 1.5 0 0 0 5 6.5v11A1.5 1.5 0 0 0 6.5 19H10M13 8l4 4-4 4M9 12h8",
   menu: "M4 7h16M4 12h16M4 17h16",
+  cerrar: "M6 6 18 18M18 6 6 18",
+  flecha: "M7 17 17 7M9 7h8v8",
+  capas: "M12 4 4 8l8 4 8-4-8-4zM4 12l8 4 8-4M4 16l8 4 8-4",
+  actividad: "M3 12h4l2.5-6 5 12L17 12h4",
+  radar: "M12 12m-2 0a2 2 0 1 0 4 0 2 2 0 1 0-4 0M12 12m-6 0a6 6 0 1 0 12 0 6 6 0 1 0-12 0M12 12m-9.5 0a9.5 9.5 0 1 0 19 0 9.5 9.5 0 1 0-19 0",
+  candado: "M8 11V8a4 4 0 0 1 8 0v3M6.5 11h11V20h-11z",
+  check: "M5 12.5 9.5 17 19 7",
+  archivo: "M7 3.5h7l5 5V20.5H7zM14 3.5V9h5",
+  filtro: "M4 5h16l-6 7.5V19l-4 1.5v-8.5L4 5z",
+  bitacora: "M4 5h16v14H4zM15 5v14",
+  edificio: "M4 20.5h16M6 20.5V9.5L12 4.5l6 5V20.5M10 20.5v-4h4v4M9.5 10h.01M14.5 10h.01M9.5 14h.01M14.5 14h.01",
 };
 
 export function Icono({ nombre }: { nombre: NombreIcono }) {
