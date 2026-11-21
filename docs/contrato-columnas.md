@@ -35,6 +35,6 @@ El punto tiene que caer dentro de `limites_provinciales`, incluidas Galápagos. 
 Regla combinada, también propuesta (P-04), con la parte mínima de HU-50:
 
 - Identificador repetido en el archivo o en un lote publicado vigente: la fila se **rechaza**.
-- Misma ubicación, redondeada a una cuadrícula de unos 5 m (`TAMANO_METROS` en el contrato), en el mismo cantón y con otro identificador: la fila queda **observada**. No se pierde y se informa.
+- Misma ubicación, redondeada a una cuadrícula de unos 5 m (`TAMANO_METROS` en el contrato), en el mismo cantón y con otro identificador: la fila queda **observada**. No se pierde, se informa y no entra al mapa ni al índice.
 
 Un archivo con el mismo hash SHA-256 no crea otro lote: se registra un intento nuevo y se devuelve el lote previo.

@@ -8,14 +8,15 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.modelos import ResultadoAnalisis
-from app.modulos.analitica.indice import DEFINICION_INDICE
+from app.modulos.analitica.indice import CONDICION_ACEPTADA, DEFINICION_INDICE
 
 _NOTA_VACIA = (
     "No hay registros publicados. Las provincias salen de la cobertura configurada "
     "y los cantones se mostrarán cuando existan datos agregados."
 )
 _NOTA_DATOS = (
-    "El índice de concentración usa los lotes publicados. La tendencia queda vacía si no había un resultado anterior."
+    "El índice de concentración usa las filas aceptadas de los lotes publicados. "
+    "La tendencia queda vacía si no había un resultado anterior."
 )
 
 
@@ -30,7 +31,8 @@ def resumen(db: Session) -> dict:
             """
         )
     ).all()
-    snapshot = _snapshot(db)
+    indicadores = _indicadores(db)
+    snapshot = [item for item in indicadores.get("provincias") or [] if isinstance(item, dict)]
     por_codigo = {str(item.get("codigo")): item for item in snapshot}
     provincias = []
     for fila in cobertura:
@@ -45,6 +47,7 @@ def resumen(db: Session) -> dict:
                 "cantones": [],
                 "agencias": int(medida.get("agencias") or 0),
                 "densidad": medida.get("densidad") if registros else None,
+                "densidad_km2": medida.get("densidad_km2") if registros else None,
                 "indice": medida.get("indice"),
                 "tendencia": medida.get("tendencia"),
             }
@@ -56,6 +59,7 @@ def resumen(db: Session) -> dict:
             "registros": int(item["registros"]),
             "agencias": int(item["agencias"]),
             "densidad": item["densidad"],
+            "densidad_km2": item.get("densidad_km2"),
             "indice": item["indice"],
             "tendencia": item["tendencia"],
         }
@@ -68,7 +72,8 @@ def resumen(db: Session) -> dict:
     return {
         "total_registros": total,
         "zonas_analizadas": len(ranking),
-        "alta_oportunidad": sum(1 for item in ranking if int(item["indice"]) >= 75),
+        "alta_concentracion": sum(1 for item in ranking if int(item["indice"]) >= 75),
+        "registros_sin_zona": int(indicadores.get("registros_sin_zona") or 0),
         "calidad_registros": _calidad(db),
         "definicion_indice": DEFINICION_INDICE,
         "nota": _NOTA_DATOS if total else _NOTA_VACIA,
@@ -80,7 +85,7 @@ def resumen(db: Session) -> dict:
 def calor(db: Session) -> dict:
     filas = db.execute(
         text(
-            """
+            f"""
             SELECT
                 round(ST_X(u.geom)::numeric, 2) AS x,
                 round(ST_Y(u.geom)::numeric, 2) AS y,
@@ -88,6 +93,7 @@ def calor(db: Session) -> dict:
             FROM ubicaciones u
             JOIN lotes_importacion l ON l.id = u.lote_id
             WHERE l.estado = 'completado'
+              AND {CONDICION_ACEPTADA}
             GROUP BY 1, 2
             ORDER BY 2, 1
             """
@@ -95,30 +101,31 @@ def calor(db: Session) -> dict:
     ).all()
     total = db.execute(
         text(
-            """
+            f"""
             SELECT count(*)
             FROM ubicaciones u
             JOIN lotes_importacion l ON l.id = u.lote_id
             WHERE l.estado = 'completado'
+              AND {CONDICION_ACEPTADA}
             """
         )
     ).scalar()
     return {
         "definicion": (
-            "Centroides de una grilla de 0,01 grados sobre los registros publicados. "
-            "Cada celda agrupa varios registros y no identifica a una persona."
+            "Centroides de una grilla de 0,01 grados sobre los registros aceptados. "
+            "Cada celda agrupa varios registros y no identifica a una persona. "
+            "Las filas observadas no entran."
         ),
         "total_registros": int(total or 0),
         "celdas": [{"longitud": float(fila.x), "latitud": float(fila.y), "peso": int(fila.peso)} for fila in filas],
     }
 
 
-def _snapshot(db: Session) -> list[dict]:
+def _indicadores(db: Session) -> dict:
     vigente = db.scalar(select(ResultadoAnalisis).where(ResultadoAnalisis.vigente.is_(True)))
-    if vigente is None or not vigente.indicadores:
-        return []
-    provincias = vigente.indicadores.get("provincias") or []
-    return [item for item in provincias if isinstance(item, dict)]
+    if vigente is None or not isinstance(vigente.indicadores, dict):
+        return {}
+    return vigente.indicadores
 
 
 def _calidad(db: Session) -> float | None:

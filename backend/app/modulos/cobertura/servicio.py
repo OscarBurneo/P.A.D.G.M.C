@@ -60,7 +60,8 @@ def resumen_vacio(db: Session) -> dict:
     return {
         "total_registros": 0,
         "zonas_analizadas": 0,
-        "alta_oportunidad": 0,
+        "alta_concentracion": 0,
+        "registros_sin_zona": 0,
         "calidad_registros": None,
         "nota": (
             "No hay registros de socios. Las provincias salen de la cobertura configurada "

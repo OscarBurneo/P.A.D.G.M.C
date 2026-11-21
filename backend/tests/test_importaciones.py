@@ -13,6 +13,8 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from alembic import command
+from app.catalogo import PERMISOS
+from app.modulos.analitica.indice import recalcular
 from app.modulos.importaciones.contrato import VERSION_CONTRATO, clave_ubicacion
 from tests.conftest import CONTRASENA, RAIZ_BACKEND, ingresar
 
@@ -438,7 +440,83 @@ def test_permiso_impide_importar_publicar_y_retirar(admin: TestClient) -> None:
         assert visor.post("/api/importaciones/00000000-0000-0000-0000-000000000000/retirar").status_code == 403
 
 
-def test_hu29_hu30_hu22_indice_ranking_y_calor(admin: TestClient) -> None:
+def test_hu10_hu12_hu51_observadas_fuera_del_analisis(admin: TestClient, db: Session) -> None:
+    base_lat = -3.99313
+    cerca = base_lat
+    for metros in (1, 2, 3, 4):
+        candidata = base_lat + metros / 111_320
+        if clave_ubicacion(candidata, -79.20422) == clave_ubicacion(base_lat, -79.20422):
+            cerca = candidata
+            break
+    lote = _cargar(
+        admin,
+        _csv(
+            [
+                _fila("SOC-X1A", latitud="-3.98000", longitud="-79.21000"),
+                _fila("SOC-X1B"),
+                _fila("SOC-X1C", latitud=f"{cerca:.8f}"),
+                _fila(
+                    "SOC-X1D",
+                    latitud="-0.19070",
+                    longitud="-78.46780",
+                    provincia="Loja",
+                    canton="Quito",
+                ),
+                _fila("SOC-X1E", latitud="-2", longitud="-83", provincia="Loja"),
+            ]
+        ),
+    )
+    assert lote["validos"] == 1
+    assert lote["observadas"] == 3
+    assert lote["rechazadas"] == 1
+    assert lote["cuadra"] is True
+    publicado = admin.post(f"/api/importaciones/{lote['id']}/publicar")
+    assert publicado.status_code == 200, publicado.text
+    informe = admin.get(f"/api/validacion/{lote['id']}")
+    assert informe.status_code == 200
+    cuerpo = informe.json()
+    assert cuerpo["total_aceptadas"] == 1
+    assert cuerpo["total_observadas"] == 3
+    assert any(item["clasificacion"] == "observada" for item in cuerpo["muestra"])
+    db.rollback()
+    clasificaciones = (
+        db.execute(
+            text(
+                """
+                SELECT atributos_socio->>'clasificacion' AS clasificacion
+                FROM ubicaciones
+                WHERE lote_id = :id
+                ORDER BY clasificacion
+                """
+            ),
+            {"id": uuid.UUID(lote["id"])},
+        )
+        .scalars()
+        .all()
+    )
+    assert clasificaciones == ["aceptada", "observada", "observada", "observada"]
+    resumen = admin.get("/api/mapas/resumen").json()
+    assert resumen["total_registros"] == 1
+    assert resumen["registros_sin_zona"] == 0
+    assert "alta_oportunidad" not in resumen
+    loja = next(item for item in resumen["provincias"] if item["codigo"] == "loja")
+    pichincha = next(item for item in resumen["provincias"] if item["codigo"] == "pichincha")
+    assert loja["registros"] == 1
+    assert pichincha["registros"] == 0
+    assert [item["registros"] for item in resumen["ranking"]] == [1]
+    calor = admin.get("/api/mapas/calor").json()
+    assert calor["total_registros"] == 1
+    assert sum(celda["peso"] for celda in calor["celdas"]) == 1
+    assert admin.get("/api/mapas/agregado").json()["total_registros"] == 1
+    assert admin.get("/api/ubicaciones").json()["total_registros"] == 1
+    texto_catalogo = next(item[3] for item in PERMISOS if item[0] == "importaciones.publicar")
+    guardada = db.execute(text("SELECT descripcion FROM permisos WHERE codigo = 'importaciones.publicar'")).scalar()
+    assert guardada == texto_catalogo
+    assert "aceptadas y observadas" not in guardada
+    assert "informe de validación" in guardada
+
+
+def test_hu29_hu30_hu22_indice_ranking_y_calor(admin: TestClient, db: Session) -> None:
     primero = _cargar(
         admin,
         _csv(
@@ -457,8 +535,15 @@ def test_hu29_hu30_hu22_indice_ranking_y_calor(admin: TestClient) -> None:
     assert resumen["ranking"][0]["registros"] == 2
     assert resumen["ranking"][0]["agencias"] == 2
     assert resumen["ranking"][0]["densidad"] == 1
+    assert resumen["ranking"][0]["densidad_km2"] == _densidad_km2(db, "loja", 2)
     assert resumen["ranking"][0]["indice"] == 100
     assert resumen["ranking"][0]["tendencia"] is None
+    assert resumen["alta_concentracion"] == 1
+    assert "alta_oportunidad" not in resumen
+    assert resumen["registros_sin_zona"] == 0
+    provincia = next(item for item in resumen["provincias"] if item["codigo"] == "loja")
+    assert provincia["registros"] == 2
+    assert provincia["densidad_km2"] == resumen["ranking"][0]["densidad_km2"]
     assert "latitud" not in admin.get("/api/mapas/agregado").text
     calor = admin.get("/api/mapas/calor")
     assert calor.status_code == 200
@@ -485,8 +570,64 @@ def test_hu29_hu30_hu22_indice_ranking_y_calor(admin: TestClient) -> None:
     loja = next(item for item in otro["ranking"] if item["codigo"] == "loja")
     assert loja["tendencia"] is not None
     assert otro["total_registros"] == 3
+    assert otro["alta_concentracion"] == 2
+    assert otro["registros_sin_zona"] == 0
+    assert "alta_oportunidad" not in otro
     indices = [item["indice"] for item in otro["ranking"]]
     assert indices == sorted(indices, reverse=True)
+
+
+def test_hu29_sin_zona_y_densidad_por_km2(admin: TestClient, db: Session) -> None:
+    lote = _cargar(admin, _csv([_fila("SOC-2900")]))
+    assert admin.post(f"/api/importaciones/{lote['id']}/publicar").status_code == 200
+    db.rollback()
+    for latitud, clasificacion in ((0, "aceptada"), (1, "observada")):
+        db.execute(
+            text(
+                """
+                INSERT INTO ubicaciones (id, geom, creado_en, lote_id, atributos_socio)
+                VALUES (
+                    gen_random_uuid(),
+                    ST_SetSRID(ST_MakePoint(0, CAST(:latitud AS float8)), 4326),
+                    now(),
+                    :lote,
+                    jsonb_build_object('clasificacion', CAST(:clasificacion AS text), 'agencia', 'Agencia Centro')
+                )
+                """
+            ),
+            {"latitud": latitud, "clasificacion": clasificacion, "lote": uuid.UUID(lote["id"])},
+        )
+    actor = db.execute(text("SELECT id FROM usuarios WHERE identificador = 'admin'")).scalar()
+    recalcular(db, actor)
+    db.commit()
+    resumen = admin.get("/api/mapas/resumen").json()
+    loja = next(item for item in resumen["provincias"] if item["codigo"] == "loja")
+    assert loja["registros"] == 1
+    assert loja["densidad"] == 1
+    assert loja["densidad_km2"] == _densidad_km2(db, "loja", 1)
+    assert resumen["registros_sin_zona"] == 1
+    assert resumen["total_registros"] == 1
+    assert "alta_oportunidad" not in resumen
+    calor = admin.get("/api/mapas/calor").json()
+    assert calor["total_registros"] == 2
+    assert sum(celda["peso"] for celda in calor["celdas"]) == 2
+
+
+def _densidad_km2(db: Session, codigo: str, registros: int) -> float:
+    db.rollback()
+    area = db.execute(
+        text(
+            """
+            SELECT ST_Area(l.geometria::geography) / 1e6
+            FROM limites_provinciales l
+            JOIN cobertura_provincial c ON c.limite_id = l.id
+            WHERE c.codigo = :codigo
+            """
+        ),
+        {"codigo": codigo},
+    ).scalar()
+    assert area
+    return round(registros / float(area), 4)
 
 
 def test_hu64_diez_mil_filas(admin: TestClient) -> None:

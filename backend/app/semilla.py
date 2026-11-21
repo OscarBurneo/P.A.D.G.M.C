@@ -40,6 +40,8 @@ def _permisos(db: Session) -> dict[str, Permiso]:
             permiso = Permiso(codigo=codigo, nombre=nombre, descripcion=descripcion, modulo=modulo)
             db.add(permiso)
             actuales[codigo] = permiso
+        elif codigo == "importaciones.publicar" and actuales[codigo].descripcion != descripcion:
+            actuales[codigo].descripcion = descripcion
     db.flush()
     return actuales
 

@@ -43,6 +43,7 @@ export type ProvinciaResumen = {
   cantones: [];
   agencias?: number;
   densidad?: number | null;
+  densidad_km2?: number | null;
   indice?: number | null;
   tendencia?: number | null;
 };
@@ -53,6 +54,7 @@ export type FilaRankingReal = {
   registros: number;
   agencias: number;
   densidad: number;
+  densidad_km2?: number | null;
   indice: number;
   tendencia: number | null;
 };
@@ -60,7 +62,8 @@ export type FilaRankingReal = {
 export type ResumenReal = {
   total_registros: number;
   zonas_analizadas: number;
-  alta_oportunidad: number;
+  alta_concentracion: number;
+  registros_sin_zona: number;
   calidad_registros: number | null;
   definicion_indice?: string;
   nota: string;

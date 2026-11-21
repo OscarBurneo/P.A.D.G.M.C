@@ -53,7 +53,8 @@ PERMISOS: tuple[tuple[str, str, str, str], ...] = (
         "importaciones.publicar",
         "Publicar importaciones",
         "importaciones",
-        "Confirma un lote pendiente y publica sus filas aceptadas y observadas en una sola transacción.",
+        "Confirma un lote pendiente en una sola transacción. "
+        "El mapa y el índice usan solo las filas aceptadas; las observadas quedan en el informe de validación.",
     ),
     (
         "importaciones.retirar",
