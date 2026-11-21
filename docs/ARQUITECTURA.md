@@ -1,4 +1,6 @@
-# Arquitectura del Sprint 0
+# Arquitectura (hasta el Sprint 2)
+
+Equivalencia de numeración: Sprint 0 del backlog = Sprint 1 de Jira; Sprints 1 y 2 del backlog = Sprint 2 de Jira.
 
 P.A.D.G.M.C es un monolito modular en un solo repositorio. Un proceso FastAPI atiende la API, React muestra las vistas y PostgreSQL 16 con PostGIS guarda los datos. No hay un bus de eventos ni un worker en este sprint: la visión los deja para cuando existan importaciones largas. La predicción queda fuera del MVP.
 

@@ -14,7 +14,7 @@ El índice de esta entrega no es el índice de expansión. Es la densidad de reg
 | HU-12 | Aceptada, observada o rechazada. | El informe | `importaciones/clasificacion.py` | `test_hu12_hu50_hu52_clasificacion_duplicados_y_cuadre` |
 | HU-50 | Solo la regla combinada: identificador repetido se rechaza; misma celda de ~5 m y otro identificador queda observada. | El informe | `importaciones/contrato.py` (`TAMANO_METROS`), `clasificacion.py` | `test_hu12_hu50_hu52_clasificacion_duplicados_y_cuadre` |
 | HU-52 | `total = válidas + observadas + rechazadas`. | `cuadra` en el lote y en el informe | `importaciones/servicio.py` | `test_hu12_hu50_hu52_clasificacion_duplicados_y_cuadre` |
-| HU-09 | Confirmar o cancelar antes de procesar. | `POST /api/importaciones/{id}/publicar`, `POST /api/importaciones/{id}/cancelar` | `importaciones/servicio.py`, `paginas/Importar.tsx` | `test_hu09_cancelar_antes_de_procesar` |
+| HU-09 | Confirmar o cancelar antes de procesar. La recarga de un lote cancelado quedó en [PR #8](https://github.com/OscarBurneo/P.A.D.G.M.C/pull/8) (merge 20c025d). | `POST /api/importaciones/{id}/publicar`, `POST /api/importaciones/{id}/cancelar` | `importaciones/servicio.py`, `paginas/Importar.tsx` | `test_hu09_cancelar_antes_de_procesar` |
 | HU-51 | Publicar en una transacción. Un fallo no deja ubicaciones del lote. | `POST /api/importaciones/{id}/publicar` | `importaciones/servicio.py` | `test_hu51_publicacion_sin_resultados_parciales` |
 | HU-16 | Estado de una importación. | `GET /api/importaciones/{id}` | `importaciones/servicio.py`, `paginas/Inicio.tsx` | `test_hu16_hu13_estado_e_historial` |
 | HU-13 | Historial de archivos. | `GET /api/importaciones` | `importaciones/servicio.py`, `paginas/Importar.tsx` | `test_hu16_hu13_estado_e_historial` |
@@ -22,7 +22,7 @@ El índice de esta entrega no es el índice de expansión. Es la densidad de reg
 | HU-46 | Los eventos de importación entran en la auditoría que ya existía. No hay rutas nuevas de auditoría. | `GET /api/auditoria` | `importaciones/servicio.py` | `test_hu46_la_importacion_queda_en_auditoria` |
 | HU-29 | Conteo y densidad por provincia. | `GET /api/mapas/resumen` | `analitica/indice.py`, `mapas/consulta.py` | `test_hu29_hu30_hu22_indice_ranking_y_calor` |
 | HU-30 | Provincias ordenadas por el índice. Tendencia vacía sin lote anterior. | `GET /api/mapas/resumen` (`ranking`) | `analitica/indice.py`, `paginas/Inicio.tsx` | `test_hu29_hu30_hu22_indice_ranking_y_calor` |
-| HU-22 | Capa de calor con lo publicado, en grilla. | `GET /api/mapas/calor` | `mapas/consulta.py`, `componentes/MapaEcuador.tsx` | `test_hu29_hu30_hu22_indice_ranking_y_calor` |
+| HU-22 | Capa de calor con lo publicado, en grilla. El foco con datos reales quedó en [PR #8](https://github.com/OscarBurneo/P.A.D.G.M.C/pull/8) (merge 20c025d). | `GET /api/mapas/calor` | `mapas/consulta.py`, `componentes/MapaEcuador.tsx` | `test_hu29_hu30_hu22_indice_ranking_y_calor` |
 | HU-64 | La carga de 10 000 filas se mide en la prueba, sin ampliar el script de autenticación. | `POST /api/importaciones` | `tests/test_importaciones.py` | `test_hu64_diez_mil_filas` |
 | HU-67 | Reglas y pruebas con identificador, más la migración reversible. | — | `docs/sprint-2.md`, `docs/contrato-columnas.md` | `test_hu67_contrato_documentado_y_migracion_reversible` |
 
