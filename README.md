@@ -4,7 +4,7 @@ Plataforma web de análisis de datos geoespaciales con mapas de calor para la **
 
 El documento de visión usa también la sigla P.A.D.M.C. En este repositorio el nombre del producto es **P.A.D.G.M.C**.
 
-El eje de la solución es **datos + geolocalización + mapas de calor**. El Sprint 0 deja lista la puerta de entrada: sesión, roles, permisos y auditoría. Esta rama suma el tablero, la cobertura nacional y la importación de socios con un contrato de columnas todavía propuesto. La predicción sigue fuera del MVP.
+El eje de la solución es **datos + geolocalización + mapas de calor**. El Sprint 0 deja lista la puerta de entrada: sesión, roles, permisos y auditoría. La rama main suma el tablero, la cobertura nacional y la importación de socios con un contrato de columnas todavía propuesto. La predicción sigue fuera del MVP.
 
 El nombre visible por defecto es **GeoOportunidades**. Se cambia con `NOMBRE_PRODUCTO` y `SUBTITULO_PRODUCTO` en el entorno; `/api/salud` se lo entrega a la interfaz. El ícono (SVG y PNG de 16 a 1024 px, para una app de escritorio futura) está en [`assets/marca/`](assets/marca/).
 
@@ -18,7 +18,9 @@ Mientras no haya un lote publicado, el resumen real está en cero y la interfaz 
 
 ## Sprint 2
 
-Historias: HU-07, HU-08, HU-09, HU-10, HU-11, HU-12, HU-13, HU-14, HU-16, HU-22, HU-29, HU-30, HU-49, HU-51 y HU-52. De arrastre, HU-46, HU-64 y HU-67 solo suman auditoría, una medición de la carga y pruebas trazables del módulo de importación.
+Equivalencia de numeración: Sprint 0 del backlog = Sprint 1 de Jira; Sprints 1 y 2 del backlog = Sprint 2 de Jira.
+
+Historias: HU-07, HU-08, HU-09, HU-10, HU-11, HU-12, HU-13, HU-14, HU-16, HU-22, HU-29, HU-30, HU-49, HU-50, HU-51 y HU-52. De arrastre, HU-46, HU-64 y HU-67 solo suman auditoría, una medición de la carga y pruebas trazables del módulo de importación.
 
 El contrato de columnas es una propuesta fácil de cambiar: [`docs/contrato-columnas.md`](docs/contrato-columnas.md) y las plantillas en [`docs/plantillas/`](docs/plantillas/). La traza de cada historia está en [`docs/sprint-2.md`](docs/sprint-2.md). El detalle de módulos está en [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md).
 
@@ -128,6 +130,7 @@ ruff check .
 ruff format --check .
 cd ../frontend
 npm run typecheck
+npm test
 npm run build
 python ../herramientas/escanear_secretos.py ..
 python ../herramientas/demostrar_bloqueo_secreto.py
