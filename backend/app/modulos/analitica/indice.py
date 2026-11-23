@@ -61,7 +61,7 @@ def recalcular(db: Session, actor_id: uuid.UUID) -> ResultadoAnalisis:
         proceso_id=proceso.id,
         actor_id=actor_id,
         estado="completado",
-        version_datos=hashlib.sha256(",".join(lotes).encode()).hexdigest(),
+        version_datos=version_de_datos(db),
         version_configuracion=VERSION_CONTRATO,
         version_catalogo=proceso.version,
         version_capa_territorial=str(FUENTE["identificador"]),
@@ -107,7 +107,32 @@ def _proceso(db: Session) -> CatalogoProceso:
     return proceso
 
 
-def _medir(db: Session) -> list[dict[str, object]]:
+def version_de_datos(db: Session) -> str:
+    return hashlib.sha256(",".join(_lotes_contados(db)).encode()).hexdigest()
+
+
+def medir_seleccion(db: Session, filtro_sql: str, params: dict | None = None) -> dict[str, object]:
+    """Misma fórmula del índice, limitada al predicado. No persiste un resultado nuevo."""
+
+    provincias = _medir(db, filtro_sql, params)
+    sin_zona = _registros_sin_zona(db, filtro_sql, params)
+    maximo = max((float(item["densidad"]) for item in provincias if int(item["registros"]) > 0), default=0.0)
+    for item in provincias:
+        if int(item["registros"]) <= 0 or maximo <= 0:
+            item["indice"] = None
+            item["tendencia"] = None
+            continue
+        item["indice"] = int(round(100 * float(item["densidad"]) / maximo))
+        item["tendencia"] = None
+    return {
+        "provincias": provincias,
+        "registros_sin_zona": sin_zona,
+        "total_registros": sum(int(item["registros"]) for item in provincias),
+    }
+
+
+def _medir(db: Session, filtro_sql: str = "", params: dict | None = None) -> list[dict[str, object]]:
+    extra = f" AND ({filtro_sql})" if filtro_sql else ""
     filas = db.execute(
         text(
             f"""
@@ -123,11 +148,12 @@ def _medir(db: Session) -> list[dict[str, object]]:
             LEFT JOIN ubicaciones u
               ON u.lote_id IN (SELECT id FROM lotes_importacion WHERE estado = 'completado')
              AND ST_Intersects(l.geometria, u.geom)
-             AND {CONDICION_ACEPTADA}
+             AND {CONDICION_ACEPTADA}{extra}
             GROUP BY l.id, c.codigo, c.orden
             ORDER BY COALESCE(c.orden, 1000), l.nombre
             """
-        )
+        ),
+        params or {},
     ).all()
     provincias = []
     for fila in filas:
@@ -150,7 +176,8 @@ def _medir(db: Session) -> list[dict[str, object]]:
     return provincias
 
 
-def _registros_sin_zona(db: Session) -> int:
+def _registros_sin_zona(db: Session, filtro_sql: str = "", params: dict | None = None) -> int:
+    extra = f" AND ({filtro_sql})" if filtro_sql else ""
     total = db.execute(
         text(
             f"""
@@ -163,9 +190,10 @@ def _registros_sin_zona(db: Session) -> int:
                 SELECT 1
                 FROM limites_provinciales p
                 WHERE ST_Intersects(p.geometria, u.geom)
-              )
+              ){extra}
             """
-        )
+        ),
+        params or {},
     ).scalar()
     return int(total or 0)
 

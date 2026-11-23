@@ -59,16 +59,42 @@ export type FilaRankingReal = {
   tendencia: number | null;
 };
 
+export type FiltroActivo = {
+  campo: string;
+  etiqueta: string;
+  operador: string;
+  valores: string[];
+};
+
+export type MetricaSeleccion = {
+  codigo: string;
+  nombre: string;
+  unidad: string;
+  valor: number | null;
+  disponible: boolean;
+};
+
 export type ResumenReal = {
   total_registros: number;
   zonas_analizadas: number;
   alta_concentracion: number;
   registros_sin_zona: number;
+  zonas_en_cero?: string[];
   calidad_registros: number | null;
   definicion_indice?: string;
   nota: string;
   provincias: ProvinciaResumen[];
   ranking?: FilaRankingReal[];
+  version_datos?: string;
+  version_catalogo_filtros?: string;
+  filtros_activos?: FiltroActivo[];
+  seleccion_vacia?: boolean;
+  indicadores_seleccion?: {
+    version?: string;
+    propuesto?: boolean;
+    nota?: string;
+    metricas: MetricaSeleccion[];
+  };
 };
 
 let cache: Promise<Territorio> | null = null;

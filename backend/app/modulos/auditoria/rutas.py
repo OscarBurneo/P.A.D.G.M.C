@@ -38,6 +38,7 @@ def listar(
     actor: str | None = None,
     operacion: str | None = None,
     entidad: str | None = None,
+    lote: str | None = None,
     resultado: str | None = None,
     desde: datetime | None = None,
     hasta: datetime | None = None,
@@ -50,6 +51,7 @@ def listar(
         actor=actor,
         operacion=operacion,
         entidad=entidad,
+        lote=lote,
         resultado=resultado,
         desde=desde,
         hasta=hasta,
@@ -58,6 +60,8 @@ def listar(
     eventos = db.scalars(sentencia.limit(limite).offset(offset)).all()
     return {
         "total": total,
+        "limite": limite,
+        "offset": offset,
         "eventos": [_evento(evento) for evento in eventos],
         "aviso": "Los eventos son append-only. La aplicación no puede modificarlos ni borrarlos.",
     }

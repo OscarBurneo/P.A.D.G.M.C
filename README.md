@@ -24,6 +24,18 @@ Historias: HU-07, HU-08, HU-09, HU-10, HU-11, HU-12, HU-13, HU-14, HU-16, HU-22,
 
 El contrato de columnas es una propuesta fácil de cambiar: [`docs/contrato-columnas.md`](docs/contrato-columnas.md) y las plantillas en [`docs/plantillas/`](docs/plantillas/). La traza de cada historia está en [`docs/sprint-2.md`](docs/sprint-2.md). El detalle de módulos está en [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md).
 
+## Sprint 3
+
+El mapa de calor se filtra y se lee con su leyenda. La traza está en [`docs/sprint-3.md`](docs/sprint-3.md).
+
+Historias: HU-24, HU-25, HU-26, HU-27, HU-54, HU-55 y HU-56. También entra HU-28 con un catálogo de indicadores propuesto, y la lista de filtros activos (HU-57) porque el mapa tiene que mostrar campo, operador y valor. El catálogo de filtros es una propuesta a partir de los atributos que el contrato ya guarda: provincia declarada, cantón, agencia, fecha y zona ADM1. Campos distintos se combinan con Y y los valores del mismo campo con O. La zona usa `ST_Intersects` sobre `limites_provinciales` e incluye el límite, igual que la densidad por provincia.
+
+No hay datos reales de la cooperativa. El ejemplo reproducible está en [`datos/sinteticos/socios_ejemplo.csv`](datos/sinteticos/socios_ejemplo.csv). Para regenerarlo:
+
+```bash
+python herramientas/generar_datos_sinteticos.py
+```
+
 ## Sprint 0
 
 Historias de este corte: HU-01, HU-02, HU-03, HU-40, HU-41, HU-42, HU-70, auditoría incremental HU-47 y los habilitadores HU-64 a HU-68 en lo que ya es comprobable.

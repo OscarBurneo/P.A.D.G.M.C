@@ -396,10 +396,12 @@ function EstadoDatos({
             <dt>Observadas</dt>
             <dd>
               {lote.observadas === undefined
-                ? lote.invalidos === undefined
-                  ? "—"
-                  : formatoEntero(lote.invalidos)
-                : `${formatoEntero(lote.observadas)}${lote.rechazadas === undefined ? "" : ` · ${formatoEntero(lote.rechazadas)} rechazadas`}`}
+                ? "—"
+                : `${formatoEntero(lote.observadas)}${
+                    (lote.rechazadas ?? lote.invalidos) === undefined
+                      ? ""
+                      : ` · ${formatoEntero((lote.rechazadas ?? lote.invalidos) as number)} rechazadas`
+                  }`}
             </dd>
           </div>
           <div>

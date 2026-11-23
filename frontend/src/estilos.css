@@ -659,8 +659,43 @@ a.ranking-fila:hover { border-color: var(--blue-medium); }
 }
 .zone-strip .active { border-color: var(--yellow); background: #fff9e5; }
 .zone-strip .active span { color: var(--navy); background: var(--yellow); }
-.leyenda { display: flex; flex-wrap: wrap; gap: 0.7rem 1.2rem; }
+.leyenda { display: flex; flex-wrap: wrap; gap: 0.7rem 1.2rem; align-items: flex-start; }
 .leyenda p { display: flex; gap: 0.4rem; align-items: center; font-size: 13px; }
+.leyenda-calor { flex: 1 1 100%; display: grid; gap: 0.35rem; }
+.leyenda-calor h3 { font-size: 0.95rem; }
+.leyenda-calor p { display: block; }
+.tramos { display: flex; flex-wrap: wrap; gap: 0.55rem 1rem; margin: 0; padding: 0; list-style: none; }
+.tramo { display: flex; align-items: flex-start; gap: 0.45rem; font-size: 13px; max-width: 28rem; }
+.tramo i { width: 1.5rem; height: 1rem; flex: 0 0 auto; border: 1px solid #003b68; }
+.tramo.puntos i {
+  background-color: #5ea9d2;
+  background-image: radial-gradient(#003b68 1.1px, transparent 1.2px);
+  background-size: 4px 4px;
+}
+.tramo.rayas i {
+  background-color: #ffe28c;
+  background-image: repeating-linear-gradient(#003b68 0 1px, transparent 1px 4px);
+}
+.tramo.diagonal i {
+  background-color: #ffcb35;
+  background-image: repeating-linear-gradient(45deg, #003b68 0 1px, transparent 1px 5px);
+}
+.tramo.solido i { background-color: #d67a00; }
+.nota-cero, .nota-ausencia { font-size: 13px; }
+.nota-cero.activa, .nota-ausencia.activa { font-weight: 800; }
+.filtros-activos { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0; padding: 0; list-style: none; }
+.chip-filtro {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  border: 1px solid var(--line);
+  background: white;
+  padding: 0.2rem 0.4rem;
+  font-size: 12px;
+}
+.layer-dock select[multiple] { min-height: 6.5rem; }
+.paginacion { display: flex; gap: 0.7rem; align-items: center; margin-top: 0.8rem; }
+.csv-lab input[type="file"] { display: none; }
 .muestra { width: 0.95rem; height: 0.95rem; display: inline-block; }
 .muestra.con-agencia { background: #f4d56a; }
 .muestra.sin-agencia { background: #d5e4f0; }
