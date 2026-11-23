@@ -6,6 +6,7 @@ import { Icono } from "../componentes/Icono";
 import { MapaEcuador, type CapasMapa } from "../componentes/MapaEcuador";
 import { resumenProvinciaEjemplo } from "../datos/ejemplo";
 import { useEjemplo } from "../ejemplo";
+import { textoDensidadKm2, textoSinZona } from "../formato";
 import { type FocoZona, useFoco } from "../foco";
 
 export function Mapa() {
@@ -149,8 +150,9 @@ export function Mapa() {
           {!ejemplo.activo && celdas.length === 0
             ? " Densidad y registros no tienen coordenadas reales que dibujar."
             : celdas.length > 0
-              ? " La capa de calor usa los lotes publicados, agrupados en una grilla."
+              ? " La capa de calor usa las filas aceptadas, agrupadas en una grilla."
               : " La capa encendida es ilustrativa, no son socios."}
+          {resumen ? ` ${textoSinZona(resumen.registros_sin_zona)}` : ""}
           {elegida?.nota ? ` ${elegida.nota}` : ""}
           {elegida?.es_galapagos ? " Galápagos se consulta en el recuadro, sin cambiar el encuadre continental." : ""}
         </p>
@@ -210,7 +212,7 @@ export function Mapa() {
               className={item.codigo === provincia ? "active" : ""}
               aria-label={
                 publicada
-                  ? `${item.nombre}, ${publicada.registros} registros publicados, índice ${publicada.indice ?? "sin índice"}`
+                  ? etiquetaProvincia(item.nombre, publicada)
                   : ilustrativa
                     ? `${item.nombre}, índice de ejemplo ${ilustrativa.indice}`
                     : `${item.nombre}, sin registros publicados`
@@ -236,7 +238,7 @@ export function Mapa() {
           <span className="muestra seleccion" /> Provincia seleccionada
         </p>
         <p>
-          <span className="muestra calor" /> {celdas.length > 0 ? "Calor de lotes publicados, de bajo a alto" : ejemplo.activo ? "Calor de ejemplo, de bajo a alto" : "Sin capa de calor real"}
+          <span className="muestra calor" /> {celdas.length > 0 ? "Calor de filas aceptadas, de bajo a alto" : ejemplo.activo ? "Calor de ejemplo, de bajo a alto" : "Sin capa de calor real"}
         </p>
       </div>
       {territorio ? (
@@ -254,6 +256,7 @@ type MedidaReal = {
   registros: number;
   indice: number | null;
   tendencia: number | null;
+  densidadKm2: number | null;
 };
 
 type MuestraEjemplo = {
@@ -270,6 +273,7 @@ function medidasReales(resumen: ResumenReal | null) {
       registros: provincia.registros,
       indice: provincia.indice ?? null,
       tendencia: provincia.tendencia ?? null,
+      densidadKm2: provincia.densidad_km2 ?? null,
     });
   }
   for (const fila of resumen?.ranking ?? []) {
@@ -277,6 +281,7 @@ function medidasReales(resumen: ResumenReal | null) {
       registros: fila.registros,
       indice: fila.indice,
       tendencia: fila.tendencia,
+      densidadKm2: fila.densidad_km2 ?? null,
     });
   }
   return medidas;
@@ -290,11 +295,19 @@ function medidaPublicada(medidas: Map<string, MedidaReal>, codigo: string) {
   return medida;
 }
 
+function etiquetaProvincia(nombre: string, medida: MedidaReal) {
+  const densidad = textoDensidadKm2(medida.densidadKm2);
+  const indice = medida.indice ?? "sin índice";
+  return `${nombre}, ${medida.registros} registros publicados${densidad ? `, ${densidad}` : ""}, índice ${indice}`;
+}
+
 function textoReal(medida: MedidaReal) {
   const indice = medida.indice === null ? "sin índice" : `índice ${medida.indice}`;
   const tendencia =
     medida.tendencia === null ? "sin tendencia" : `tendencia ${medida.tendencia > 0 ? "+" : ""}${medida.tendencia}`;
-  return `${medida.registros.toLocaleString("es-EC")} registros publicados · ${indice} · ${tendencia}`;
+  const densidad = textoDensidadKm2(medida.densidadKm2);
+  const extra = densidad ? ` · ${densidad}` : "";
+  return `${medida.registros.toLocaleString("es-EC")} registros publicados${extra} · ${indice} · ${tendencia}`;
 }
 
 function textoEjemplo(muestra: MuestraEjemplo) {

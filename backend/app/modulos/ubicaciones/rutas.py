@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.dependencias import exige, obtener_db
 from app.errores import ErrorAplicacion
 from app.modelos import Usuario
+from app.modulos.analitica.indice import CONDICION_ACEPTADA
 
 router = APIRouter(prefix="/api/ubicaciones", tags=["ubicaciones"])
 
@@ -18,18 +19,19 @@ def consultar(
 ) -> dict:
     total = db.execute(
         text(
-            """
+            f"""
             SELECT count(*)
             FROM ubicaciones u
             JOIN lotes_importacion l ON l.id = u.lote_id
             WHERE l.estado = 'completado'
+              AND {CONDICION_ACEPTADA}
             """
         )
     ).scalar()
     return {
         "total_registros": int(total or 0),
         "agregado": [],
-        "nota": "Conteo de registros publicados. Esta respuesta no identifica a cada socio.",
+        "nota": "Conteo de registros aceptados. Esta respuesta no identifica a cada socio.",
     }
 
 

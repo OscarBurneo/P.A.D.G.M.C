@@ -15,10 +15,14 @@ CODIGO_PROCESO = "indice_concentracion"
 VERSION_PROCESO = "0.1.0-propuesto"
 METRICA = "indice_concentracion"
 DEFINICION_INDICE = (
-    "Índice de concentración propuesto: registros publicados por agencia, "
+    "Índice de concentración propuesto: registros aceptados por agencia, "
     "normalizado de 0 a 100 frente a la provincia con mayor densidad de este cálculo. "
-    "La tendencia es la diferencia con el resultado anterior y queda vacía si no había un lote previo."
+    "La densidad por km² informa el territorio y no sustituye a la densidad por agencia. "
+    "Las filas observadas no entran. La tendencia es la diferencia con el resultado anterior "
+    "y queda vacía si no había un lote previo."
 )
+# Las observadas se guardan en el informe y pueden quedar en ubicaciones, pero no se cuentan.
+CONDICION_ACEPTADA = "COALESCE(u.atributos_socio->>'clasificacion', 'aceptada') = 'aceptada'"
 
 
 def recalcular(db: Session, actor_id: uuid.UUID) -> ResultadoAnalisis:
@@ -26,6 +30,7 @@ def recalcular(db: Session, actor_id: uuid.UUID) -> ResultadoAnalisis:
     anterior = db.scalar(select(ResultadoAnalisis).where(ResultadoAnalisis.vigente.is_(True)))
     previos = _indices_previos(anterior)
     provincias = _medir(db)
+    sin_zona = _registros_sin_zona(db)
     maximo = max((item["densidad"] for item in provincias if item["registros"] > 0), default=0.0)
     lotes = _lotes_contados(db)
     for item in provincias:
@@ -42,9 +47,14 @@ def recalcular(db: Session, actor_id: uuid.UUID) -> ResultadoAnalisis:
         db.execute(update(ResultadoAnalisis).where(ResultadoAnalisis.vigente.is_(True)).values(vigente=False))
     indicadores = {
         "definicion": DEFINICION_INDICE,
-        "formula": "densidad = registros / max(agencias, 1); indice = redondeo(100 * densidad / max(densidad))",
+        "formula": (
+            "densidad = registros / max(agencias, 1); "
+            "densidad_km2 = registros / (ST_Area(geometria::geography) / 1e6); "
+            "indice = redondeo(100 * densidad / max(densidad))"
+        ),
         "provincias": provincias,
         "total_registros": sum(item["registros"] for item in provincias),
+        "registros_sin_zona": sin_zona,
         "lotes": lotes,
     }
     ejecucion = EjecucionAnalisis(
@@ -90,7 +100,7 @@ def _proceso(db: Session) -> CatalogoProceso:
         nombre="Índice de concentración provincial",
         version=VERSION_PROCESO,
         habilitado=True,
-        entradas={"origen": "ubicaciones de lotes en estado completado", "metrica": METRICA},
+        entradas={"origen": "ubicaciones aceptadas de lotes en estado completado", "metrica": METRICA},
     )
     db.add(proceso)
     db.flush()
@@ -100,19 +110,21 @@ def _proceso(db: Session) -> CatalogoProceso:
 def _medir(db: Session) -> list[dict[str, object]]:
     filas = db.execute(
         text(
-            """
+            f"""
             SELECT
                 l.nombre AS nombre,
                 l.nombre_clave AS nombre_clave,
                 c.codigo AS codigo_cobertura,
                 count(u.id) AS registros,
-                count(DISTINCT NULLIF(u.atributos_socio->>'agencia', '')) AS agencias
+                count(DISTINCT NULLIF(u.atributos_socio->>'agencia', '')) AS agencias,
+                ST_Area(l.geometria::geography) / 1e6 AS area_km2
             FROM limites_provinciales l
             LEFT JOIN cobertura_provincial c ON c.limite_id = l.id
             LEFT JOIN ubicaciones u
               ON u.lote_id IN (SELECT id FROM lotes_importacion WHERE estado = 'completado')
              AND ST_Intersects(l.geometria, u.geom)
-            GROUP BY l.nombre, l.nombre_clave, c.codigo, c.orden
+             AND {CONDICION_ACEPTADA}
+            GROUP BY l.id, c.codigo, c.orden
             ORDER BY COALESCE(c.orden, 1000), l.nombre
             """
         )
@@ -121,7 +133,9 @@ def _medir(db: Session) -> list[dict[str, object]]:
     for fila in filas:
         registros = int(fila.registros or 0)
         agencias = int(fila.agencias or 0)
+        area = float(fila.area_km2 or 0)
         densidad = round(registros / max(agencias, 1), 4) if registros else 0.0
+        densidad_km2 = round(registros / area, 4) if registros and area > 0 else 0.0
         provincias.append(
             {
                 "codigo": fila.codigo_cobertura or a_codigo(fila.nombre),
@@ -130,9 +144,30 @@ def _medir(db: Session) -> list[dict[str, object]]:
                 "registros": registros,
                 "agencias": agencias,
                 "densidad": densidad,
+                "densidad_km2": densidad_km2,
             }
         )
     return provincias
+
+
+def _registros_sin_zona(db: Session) -> int:
+    total = db.execute(
+        text(
+            f"""
+            SELECT count(*)
+            FROM ubicaciones u
+            JOIN lotes_importacion l ON l.id = u.lote_id
+            WHERE l.estado = 'completado'
+              AND {CONDICION_ACEPTADA}
+              AND NOT EXISTS (
+                SELECT 1
+                FROM limites_provinciales p
+                WHERE ST_Intersects(p.geometria, u.geom)
+              )
+            """
+        )
+    ).scalar()
+    return int(total or 0)
 
 
 def _lotes_contados(db: Session) -> list[str]:

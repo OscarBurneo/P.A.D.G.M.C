@@ -9,6 +9,17 @@ export function formatoNumero(valor: number) {
   return numero.format(valor);
 }
 
+export function textoDensidadKm2(valor: number | null | undefined) {
+  if (valor === null || valor === undefined) {
+    return "";
+  }
+  return `${valor.toLocaleString("es-EC", { maximumFractionDigits: 4 })} /km²`;
+}
+
+export function textoSinZona(total: number) {
+  return `${formatoEntero(total)} registros no intersectan ninguna provincia.`;
+}
+
 export function formatoDelta(valor: number) {
   const signo = valor > 0 ? "+" : "";
   return `${signo}${numero.format(valor)} %`;

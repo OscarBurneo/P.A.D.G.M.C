@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.dependencias import exige, obtener_db
 from app.modelos import Usuario
+from app.modulos.analitica.indice import CONDICION_ACEPTADA
 from app.modulos.mapas.consulta import calor, resumen
 
 router = APIRouter(prefix="/api/mapas", tags=["mapas"])
@@ -24,11 +25,12 @@ def agregado(
 ) -> dict:
     total = db.execute(
         text(
-            """
+            f"""
             SELECT count(*)
             FROM ubicaciones u
             JOIN lotes_importacion l ON l.id = u.lote_id
             WHERE l.estado = 'completado'
+              AND {CONDICION_ACEPTADA}
             """
         )
     ).scalar()

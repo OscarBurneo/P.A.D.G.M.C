@@ -12,7 +12,7 @@ import {
   zonasAltas,
 } from "../datos/ejemplo";
 import { useEjemplo } from "../ejemplo";
-import { formatoEntero, formatoNumero } from "../formato";
+import { formatoEntero, formatoNumero, textoDensidadKm2, textoSinZona } from "../formato";
 import { puede, useSesion } from "../sesion";
 
 const TOP_RANKING = 5;
@@ -147,7 +147,7 @@ export function Inicio() {
                       posicion={posicion}
                       nombre={fila.nombre}
                       indice={fila.indice}
-                      detalle={`${formatoEntero(fila.registros)} registros`}
+                      detalle={detalleProvincia(fila)}
                       tendencia={textoTendencia(fila.tendencia)}
                     />
                   </Link>
@@ -157,7 +157,7 @@ export function Inicio() {
                       posicion={posicion}
                       nombre={fila.nombre}
                       indice={fila.indice}
-                      detalle={`${formatoEntero(fila.registros)} registros`}
+                      detalle={detalleProvincia(fila)}
                       tendencia={textoTendencia(fila.tendencia)}
                     />
                   </div>
@@ -203,6 +203,9 @@ export function Inicio() {
             </span>
           </div>
         )}
+        {resumen && (resumen.total_registros > 0 || resumen.registros_sin_zona > 0) ? (
+          <p className="nota-capa">{textoSinZona(resumen.registros_sin_zona)}</p>
+        ) : null}
       </article>
       <EstadoDatos
         ejemplo={ejemplo.activo}
@@ -279,6 +282,11 @@ export function Inicio() {
       </article>
     </div>
   );
+}
+
+function detalleProvincia(fila: FilaRankingReal) {
+  const densidad = textoDensidadKm2(fila.densidad_km2);
+  return `${formatoEntero(fila.registros)} registros${densidad ? ` · ${densidad}` : ""}`;
 }
 
 function textoTendencia(tendencia: FilaRankingReal["tendencia"]) {
