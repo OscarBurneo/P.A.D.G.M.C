@@ -316,7 +316,8 @@ def _dominios(db: Session) -> dict:
             SELECT
                 u.atributos_socio->>'provincia' AS provincia,
                 u.atributos_socio->>'canton' AS canton,
-                u.atributos_socio->>'agencia' AS agencia
+                u.atributos_socio->>'agencia' AS agencia,
+                u.atributos_socio->>'fecha' AS fecha
             FROM ubicaciones u
             JOIN lotes_importacion l ON l.id = u.lote_id
             WHERE l.estado = 'completado'
@@ -327,6 +328,8 @@ def _dominios(db: Session) -> dict:
     provincias = sorted({fila.provincia for fila in filas if fila.provincia})
     cantones = sorted({fila.canton for fila in filas if fila.canton})
     agencias = sorted({fila.agencia for fila in filas if fila.agencia})
+    fechas = sorted({fila.fecha for fila in filas if fila.fecha and len(str(fila.fecha)) == 10})
+    pares = sorted({(fila.provincia, fila.canton) for fila in filas if fila.provincia and fila.canton})
     zonas = db.execute(
         text(
             """
@@ -342,7 +345,9 @@ def _dominios(db: Session) -> dict:
     return {
         "provincia": provincias,
         "canton": cantones,
+        "canton_por_provincia": [{"provincia": provincia, "canton": canton} for provincia, canton in pares],
         "agencia": agencias,
+        "fecha": fechas,
         "zona": [
             {"codigo": fila.codigo, "nombre": fila.nombre, "con_agencia": bool(fila.con_agencia)} for fila in zonas
         ],

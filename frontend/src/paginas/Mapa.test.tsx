@@ -1,7 +1,7 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Mapa } from "./Mapa";
 
 const { api, cargarTerritorio } = vi.hoisted(() => ({
@@ -75,6 +75,10 @@ const resumen = {
 };
 
 describe("mapa con leyenda y filtros", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
     api.mockReset();
     cargarTerritorio.mockReset();
@@ -101,7 +105,17 @@ describe("mapa con leyenda y filtros", () => {
           propuesto: true,
           version: "0.1.0-propuesto",
           nota: "Propuesto.",
-          dominios: { provincia: ["Loja"], canton: ["Loja"], agencia: ["Agencia Norte"] },
+          dominios: {
+            provincia: ["Loja", "Pichincha"],
+            canton: ["Catamayo", "Quito"],
+            canton_por_provincia: [
+              { provincia: "Loja", canton: "Catamayo" },
+              { provincia: "Pichincha", canton: "Quito" },
+            ],
+            agencia: ["Agencia Norte"],
+            fecha: ["2024-03-15", "2024-06-01"],
+            zona: [{ codigo: "loja", nombre: "Loja", con_agencia: true }],
+          },
         });
       }
       if (ruta.includes("agencia=")) {
@@ -135,10 +149,41 @@ describe("mapa con leyenda y filtros", () => {
     expect(screen.getByText(/Cero\./)).toBeInTheDocument();
     expect(screen.getByText(/Ausencia de datos\./)).toBeInTheDocument();
     expect(screen.getByText(/Versión de datos abc123abc123/)).toBeInTheDocument();
-    await usuario.selectOptions(screen.getByLabelText("Agencia"), "Agencia Norte");
+    await usuario.click(screen.getByRole("button", { name: /Agencia: Todos/ }));
+    await usuario.click(screen.getByRole("option", { name: "Agencia Norte" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("no se muestran como vigentes");
     expect(screen.queryByText(/Versión de datos abc123abc123/)).not.toBeInTheDocument();
     const rutas = api.mock.calls.map((llamada) => String(llamada[0]));
     expect(rutas.some((ruta) => ruta.includes("agencia=Agencia"))).toBe(true);
+  });
+
+  it("abre desplegables con Todos y limita el cantón a la provincia", async () => {
+    const usuario = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <Mapa />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole("button", { name: "Provincia declarada: Todos" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cantón declarado: Todos" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Fecha desde: Todos" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Zona geográfica: Todos" })).toBeInTheDocument();
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+
+    await usuario.click(screen.getByRole("button", { name: "Provincia declarada: Todos" }));
+    expect(screen.getByRole("option", { name: "Todos" })).toHaveAttribute("aria-selected", "true");
+    await usuario.click(screen.getByRole("option", { name: "Loja" }));
+    expect(screen.getByRole("button", { name: "Provincia declarada: Loja" })).toHaveAttribute("aria-expanded", "true");
+
+    await usuario.click(screen.getByRole("button", { name: "Cantón declarado: Todos" }));
+    expect(screen.getByRole("option", { name: "Catamayo" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Quito" })).not.toBeInTheDocument();
+    await usuario.click(screen.getByRole("option", { name: "Catamayo" }));
+    const rutas = api.mock.calls.map((llamada) => String(llamada[0]));
+    expect(rutas.some((ruta) => ruta.includes("provincia=Loja") && ruta.includes("canton=Catamayo"))).toBe(true);
+
+    await usuario.click(screen.getByRole("button", { name: "Fecha desde: Todos" }));
+    expect(screen.getByRole("option", { name: "2024-03-15" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "2024-06-01" })).toBeInTheDocument();
   });
 });

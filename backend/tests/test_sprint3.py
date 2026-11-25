@@ -82,6 +82,8 @@ def test_filtros_leyenda_zona_y_combinacion(admin: TestClient, db: Session) -> N
     assert catalogo.json()["version"].endswith("propuesto")
     campos = {item["campo"] for item in catalogo.json()["campos"]}
     assert {"provincia", "canton", "agencia", "fecha", "zona"} <= campos
+    assert "fecha" in catalogo.json()["dominios"]
+    assert "canton_por_provincia" in catalogo.json()["dominios"]
     lote = _cargar(
         admin,
         _csv(
@@ -102,6 +104,10 @@ def test_filtros_leyenda_zona_y_combinacion(admin: TestClient, db: Session) -> N
         ),
     )
     assert admin.post(f"/api/importaciones/{lote['id']}/publicar").status_code == 200
+    opciones = admin.get("/api/mapas/filtros").json()["dominios"]
+    assert "2024-03-15" in opciones["fecha"]
+    assert {"provincia": "Loja", "canton": "Loja"} in opciones["canton_por_provincia"]
+    assert "Quito" in {item["canton"] for item in opciones["canton_por_provincia"] if item["provincia"] == "Pichincha"}
     completo = _par(admin)
     assert completo["calor"]["total_registros"] == 3
     assert completo["resumen"]["total_registros"] + completo["resumen"]["registros_sin_zona"] == 3

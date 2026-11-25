@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import {
@@ -26,6 +26,8 @@ import {
 import { textoDensidadKm2, textoSinZona } from "../formato";
 import { type FocoZona, useFoco } from "../foco";
 
+type ParProvinciaCanton = { provincia: string; canton: string };
+
 type CatalogoFiltros = {
   propuesto: boolean;
   nota: string;
@@ -33,7 +35,10 @@ type CatalogoFiltros = {
   dominios: {
     provincia: string[];
     canton: string[];
+    canton_por_provincia?: ParProvinciaCanton[];
     agencia: string[];
+    fecha?: string[];
+    zona?: { codigo: string; nombre: string; con_agencia?: boolean }[];
   };
 };
 
@@ -137,7 +142,20 @@ export function Mapa() {
 
   const provincias = territorio?.provincias ?? [];
   const conAgencia = provincias.filter((item) => item.con_agencia);
-  const resto = provincias.filter((item) => !item.con_agencia);
+  const zonasOpciones = useMemo(() => {
+    const delCatalogo = catalogo?.dominios.zona ?? [];
+    if (delCatalogo.length > 0) {
+      return delCatalogo.map((item) => ({ valor: item.codigo, etiqueta: item.nombre }));
+    }
+    return provincias.map((item) => ({ valor: item.codigo, etiqueta: item.nombre }));
+  }, [catalogo, provincias]);
+  const cantonesVisibles = useMemo(
+    () => cantonesDe(catalogo, filtros.provincias),
+    [catalogo, filtros.provincias],
+  );
+  const fechas = catalogo?.dominios.fecha ?? [];
+  const fechasDesde = filtros.fechaHasta ? fechas.filter((fecha) => fecha <= filtros.fechaHasta) : fechas;
+  const fechasHasta = filtros.fechaDesde ? fechas.filter((fecha) => fecha >= filtros.fechaDesde) : fechas;
   const elegida = provincias.find((item) => item.codigo === foco) ?? null;
   const tira = busqueda ? conAgencia.filter((item) => item.nombre.toLocaleLowerCase("es").includes(busqueda)) : conAgencia;
   const medidas = useMemo(() => medidasReales(resumen), [resumen]);
@@ -197,51 +215,60 @@ export function Mapa() {
             Provincias con presencia configurada
           </span>
         </button>
-        <label>
-          Zona geográfica
-          <select
-            multiple
-            aria-label="Zona geográfica"
-            value={filtros.zonas}
-            onChange={(evento) => aplicar({ zonas: valoresSeleccionados(evento) })}
-          >
-            <optgroup label="Con agencia">
-              {conAgencia.map((item) => (
-                <option key={item.codigo} value={item.codigo}>
-                  {item.nombre}
-                </option>
-              ))}
-            </optgroup>
-            <optgroup label="Resto del país">
-              {resto.map((item) => (
-                <option key={item.codigo} value={item.codigo}>
-                  {item.nombre}
-                  {item.es_galapagos ? " (recuadro)" : ""}
-                </option>
-              ))}
-            </optgroup>
-          </select>
-        </label>
+        <DesplegableFiltro
+          etiqueta="Zona geográfica"
+          opciones={zonasOpciones}
+          seleccionados={filtros.zonas}
+          multiple
+          onChange={(valores) => {
+            if (valores.length === 0) {
+              limpiar();
+            }
+            aplicar({ zonas: valores });
+          }}
+        />
         <p id="nota-zona" className="nota-capa">
-          La zona usa los límites ADM1 ya cargados. Varias zonas se combinan con O. Sin selección se ve todo el país.
+          La zona usa los límites ADM1 ya cargados. Varias zonas se combinan con O. Todos muestra el país.
         </p>
-        {listaOpciones("Provincia declarada", "provincia", catalogo?.dominios.provincia ?? [], filtros.provincias, (valores) =>
-          aplicar({ provincias: valores }),
-        )}
-        {listaOpciones("Cantón declarado", "canton", catalogo?.dominios.canton ?? [], filtros.cantones, (valores) =>
-          aplicar({ cantones: valores }),
-        )}
-        {listaOpciones("Agencia", "agencia", catalogo?.dominios.agencia ?? [], filtros.agencias, (valores) =>
-          aplicar({ agencias: valores }),
-        )}
-        <label>
-          Fecha desde
-          <input type="date" value={filtros.fechaDesde} onChange={(evento) => aplicar({ fechaDesde: evento.target.value })} />
-        </label>
-        <label>
-          Fecha hasta
-          <input type="date" value={filtros.fechaHasta} onChange={(evento) => aplicar({ fechaHasta: evento.target.value })} />
-        </label>
+        <DesplegableFiltro
+          etiqueta="Provincia declarada"
+          opciones={(catalogo?.dominios.provincia ?? []).map((valor) => ({ valor, etiqueta: valor }))}
+          seleccionados={filtros.provincias}
+          multiple
+          onChange={(valores) => {
+            const permitidos = new Set(cantonesDe(catalogo, valores));
+            aplicar({
+              provincias: valores,
+              cantones: valores.length === 0 ? filtros.cantones : filtros.cantones.filter((canton) => permitidos.has(canton)),
+            });
+          }}
+        />
+        <DesplegableFiltro
+          etiqueta="Cantón declarado"
+          opciones={cantonesVisibles.map((valor) => ({ valor, etiqueta: valor }))}
+          seleccionados={filtros.cantones}
+          multiple
+          onChange={(valores) => aplicar({ cantones: valores })}
+        />
+        <DesplegableFiltro
+          etiqueta="Agencia"
+          opciones={(catalogo?.dominios.agencia ?? []).map((valor) => ({ valor, etiqueta: valor }))}
+          seleccionados={filtros.agencias}
+          multiple
+          onChange={(valores) => aplicar({ agencias: valores })}
+        />
+        <DesplegableFiltro
+          etiqueta="Fecha desde"
+          opciones={fechasDesde.map((valor) => ({ valor, etiqueta: valor }))}
+          seleccionados={filtros.fechaDesde ? [filtros.fechaDesde] : []}
+          onChange={(valores) => aplicar({ fechaDesde: valores[0] ?? "" })}
+        />
+        <DesplegableFiltro
+          etiqueta="Fecha hasta"
+          opciones={fechasHasta.map((valor) => ({ valor, etiqueta: valor }))}
+          seleccionados={filtros.fechaHasta ? [filtros.fechaHasta] : []}
+          onChange={(valores) => aplicar({ fechaHasta: valores[0] ?? "" })}
+        />
         <button
           type="button"
           className="secundario"
@@ -403,35 +430,113 @@ type MuestraEjemplo = {
   nivel: "Muy alta" | "Alta" | "Media";
 };
 
-function valoresSeleccionados(evento: ChangeEvent<HTMLSelectElement>) {
-  return Array.from(evento.target.selectedOptions, (opcion) => opcion.value);
+function cantonesDe(catalogo: CatalogoFiltros | null, provinciasElegidas: string[]) {
+  const pares = catalogo?.dominios.canton_por_provincia ?? [];
+  const lista = pares.length > 0 ? pares.map((par) => par.canton) : (catalogo?.dominios.canton ?? []);
+  const origen = pares.length > 0 && provinciasElegidas.length > 0
+    ? pares.filter((par) => provinciasElegidas.includes(par.provincia)).map((par) => par.canton)
+    : lista;
+  return [...new Set(origen)].sort((a, b) => a.localeCompare(b, "es"));
 }
 
-function listaOpciones(
-  etiqueta: string,
-  campo: string,
-  opciones: string[],
-  seleccionados: string[],
-  alCambiar: (valores: string[]) => void,
-) {
-  if (opciones.length === 0) {
-    return (
-      <p className="nota-capa" key={campo}>
-        {etiqueta}: sin valores publicados.
-      </p>
-    );
+function DesplegableFiltro({
+  etiqueta,
+  opciones,
+  seleccionados,
+  multiple = false,
+  onChange,
+}: {
+  etiqueta: string;
+  opciones: { valor: string; etiqueta: string }[];
+  seleccionados: string[];
+  multiple?: boolean;
+  onChange: (valores: string[]) => void;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const caja = useRef<HTMLDivElement>(null);
+  const resumen = seleccionados.length === 0
+    ? "Todos"
+    : opciones
+        .filter((opcion) => seleccionados.includes(opcion.valor))
+        .map((opcion) => opcion.etiqueta)
+        .join(", ") || seleccionados.join(", ");
+
+  useEffect(() => {
+    if (!abierto) {
+      return;
+    }
+    function fuera(evento: MouseEvent) {
+      if (!caja.current?.contains(evento.target as Node)) {
+        setAbierto(false);
+      }
+    }
+    function tecla(evento: KeyboardEvent) {
+      if (evento.key === "Escape") {
+        setAbierto(false);
+      }
+    }
+    document.addEventListener("mousedown", fuera);
+    document.addEventListener("keydown", tecla);
+    return () => {
+      document.removeEventListener("mousedown", fuera);
+      document.removeEventListener("keydown", tecla);
+    };
+  }, [abierto]);
+
+  function elegirOpcion(valor: string | null) {
+    if (valor === null) {
+      onChange([]);
+      setAbierto(false);
+      return;
+    }
+    if (!multiple) {
+      onChange([valor]);
+      setAbierto(false);
+      return;
+    }
+    onChange(seleccionados.includes(valor) ? seleccionados.filter((item) => item !== valor) : [...seleccionados, valor]);
   }
+
   return (
-    <label key={campo}>
-      {etiqueta}
-      <select multiple aria-label={etiqueta} value={seleccionados} onChange={(evento) => alCambiar(valoresSeleccionados(evento))}>
-        {opciones.map((opcion) => (
-          <option key={opcion} value={opcion}>
-            {opcion}
-          </option>
-        ))}
-      </select>
-    </label>
+    <div className="desplegable" ref={caja}>
+      <span className="desplegable-etiqueta">{etiqueta}</span>
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={abierto}
+        aria-label={`${etiqueta}: ${resumen}`}
+        onClick={() => setAbierto((valor) => !valor)}
+      >
+        {resumen}
+      </button>
+      {abierto ? (
+        <ul role="listbox" aria-label={etiqueta} aria-multiselectable={multiple || undefined}>
+          <li role="presentation">
+            <button type="button" role="option" aria-selected={seleccionados.length === 0} onClick={() => elegirOpcion(null)}>
+              Todos
+            </button>
+          </li>
+          {opciones.length === 0 ? (
+            <li role="presentation">
+              <span>Sin valores publicados</span>
+            </li>
+          ) : (
+            opciones.map((opcion) => (
+              <li key={opcion.valor} role="presentation">
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={seleccionados.includes(opcion.valor)}
+                  onClick={() => elegirOpcion(opcion.valor)}
+                >
+                  {opcion.etiqueta}
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+      ) : null}
+    </div>
   );
 }
 
