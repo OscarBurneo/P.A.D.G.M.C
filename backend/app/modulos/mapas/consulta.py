@@ -37,6 +37,7 @@ _NOTA_FILTRO = (
 )
 _NOTA_AUSENCIA = "La selección no tiene registros aceptados. Es ausencia de datos, no un valor cero."
 
+LIMITE_PUNTOS = 4000
 _VARIABLE = "Registros aceptados"
 _UNIDAD = "registros por celda de 0,01 grados"
 _PATRONES = ("puntos", "rayas", "diagonal", "solido")
@@ -172,6 +173,64 @@ def calor(db: Session, seleccion: Seleccion) -> dict:
         "filtros_activos": seleccion.activos(),
         "seleccion_vacia": not seleccion.vacia and total_entero == 0,
         "leyenda": _leyenda(celdas, total_entero),
+    }
+
+
+def puntos(db: Session, seleccion: Seleccion) -> dict:
+    """Puntos aceptados de la selección, sin nombre ni identificador."""
+
+    filtro_sql, params = predicado(seleccion)
+    extra = f" AND ({filtro_sql})" if filtro_sql else ""
+    total = db.execute(
+        text(
+            f"""
+            SELECT count(*)
+            FROM ubicaciones u
+            JOIN lotes_importacion l ON l.id = u.lote_id
+            WHERE l.estado = 'completado'
+              AND {CONDICION_ACEPTADA}{extra}
+            """
+        ),
+        params,
+    ).scalar()
+    filas = db.execute(
+        text(
+            f"""
+            SELECT
+                ST_X(u.geom) AS x,
+                ST_Y(u.geom) AS y,
+                u.atributos_socio->>'provincia' AS provincia,
+                u.atributos_socio->>'canton' AS canton,
+                u.atributos_socio->>'agencia' AS agencia,
+                u.atributos_socio->>'fecha' AS fecha
+            FROM ubicaciones u
+            JOIN lotes_importacion l ON l.id = u.lote_id
+            WHERE l.estado = 'completado'
+              AND {CONDICION_ACEPTADA}{extra}
+            ORDER BY u.id
+            LIMIT :limite
+            """
+        ),
+        {**params, "limite": LIMITE_PUNTOS},
+    ).all()
+    total_entero = int(total or 0)
+    return {
+        "limite": LIMITE_PUNTOS,
+        "truncado": total_entero > LIMITE_PUNTOS,
+        "total_registros": total_entero,
+        "puntos": [
+            {
+                "longitud": float(fila.x),
+                "latitud": float(fila.y),
+                "provincia": fila.provincia or "",
+                "canton": fila.canton or "",
+                "agencia": fila.agencia or "",
+                "fecha": fila.fecha or "",
+            }
+            for fila in filas
+        ],
+        "version_datos": version_de_datos(db),
+        "filtros_activos": seleccion.activos(),
     }
 
 
@@ -329,6 +388,8 @@ def _leyenda(celdas: list[dict], total: int) -> dict:
         "unidad": _UNIDAD,
         "significado": (
             "El color muestra la intensidad relativa del peso de cada celda dentro de la selección vigente. "
+            "El halo es local: no cubre la provincia entera. Al acercar, el calor se apaga y cada registro "
+            "aceptado se ve como un punto, sin nombre ni identificador. "
             "La etiqueta, el intervalo y el patrón se leen sin depender del color."
         ),
         "cero": (

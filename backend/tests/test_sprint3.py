@@ -213,6 +213,47 @@ def test_filtros_leyenda_zona_y_combinacion(admin: TestClient, db: Session) -> N
     assert con_limite["total_registros"] == 3
 
 
+def test_puntos_individuales_respetan_el_filtro_y_omiten_datos_personales(admin: TestClient) -> None:
+    lote = _cargar(
+        admin,
+        _csv(
+            [
+                _fila("SOC-P1", nombre="Ana Pérez"),
+                _fila("SOC-P2", agencia="Agencia Norte", latitud="-3.99000", longitud="-79.20000"),
+                _fila(
+                    "SOC-P3",
+                    nombre="Luis Quito",
+                    latitud="-0.18070",
+                    longitud="-78.46780",
+                    provincia="Pichincha",
+                    canton="Quito",
+                    agencia="Agencia Norte",
+                ),
+            ]
+        ),
+    )
+    assert admin.post(f"/api/importaciones/{lote['id']}/publicar").status_code == 200
+    respuesta = admin.get("/api/mapas/puntos")
+    assert respuesta.status_code == 200, respuesta.text
+    cuerpo = respuesta.json()
+    assert cuerpo["total_registros"] == 3
+    assert cuerpo["truncado"] is False
+    assert cuerpo["limite"] >= 3
+    assert len(cuerpo["puntos"]) == 3
+    texto = respuesta.text.casefold()
+    assert "ana pérez" not in texto
+    assert "luis quito" not in texto
+    assert "soc-p" not in texto
+    for punto in cuerpo["puntos"]:
+        assert set(punto) == {"longitud", "latitud", "provincia", "canton", "agencia", "fecha"}
+    loja = admin.get("/api/mapas/puntos", params={"zona": "loja"})
+    assert loja.status_code == 200, loja.text
+    assert loja.json()["total_registros"] == 2
+    assert loja.json()["filtros_activos"][0]["campo"] == "zona"
+    assert all(punto["provincia"] == "Loja" for punto in loja.json()["puntos"])
+    assert loja.json()["version_datos"] == cuerpo["version_datos"]
+
+
 def _par(admin: TestClient, params: dict | list | None = None) -> dict:
     calor = admin.get("/api/mapas/calor", params=params)
     resumen = admin.get("/api/mapas/resumen", params=params)

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.dependencias import exige, obtener_db
 from app.modelos import Usuario
 from app.modulos.analitica.indice import CONDICION_ACEPTADA
-from app.modulos.mapas.consulta import calor, resumen
+from app.modulos.mapas.consulta import calor, puntos, resumen
 from app.modulos.mapas.filtros import catalogo, interpretar
 
 router = APIRouter(prefix="/api/mapas", tags=["mapas"])
@@ -67,6 +67,15 @@ def calor_mapa(
     db: Session = Depends(obtener_db),
 ) -> dict:
     return calor(db, interpretar(request.query_params, db))
+
+
+@router.get("/puntos")
+def puntos_mapa(
+    request: Request,
+    _: Usuario = Depends(exige("mapas.ver")),
+    db: Session = Depends(obtener_db),
+) -> dict:
+    return puntos(db, interpretar(request.query_params, db))
 
 
 @router.get("/detalle")

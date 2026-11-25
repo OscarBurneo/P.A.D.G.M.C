@@ -10,7 +10,7 @@ import {
 } from "../cobertura";
 import { Icono } from "../componentes/Icono";
 import { LeyendaCalor, type LeyendaCalorDatos } from "../componentes/LeyendaCalor";
-import { MapaEcuador, type CapasMapa } from "../componentes/MapaEcuador";
+import { MapaEcuador, type CapasMapa, type PuntoRegistro } from "../componentes/MapaEcuador";
 import { resumenProvinciaEjemplo } from "../datos/ejemplo";
 import { useEjemplo } from "../ejemplo";
 import {
@@ -50,6 +50,12 @@ type Calor = {
   seleccion_vacia?: boolean;
 };
 
+type RespuestaPuntos = {
+  puntos?: PuntoRegistro[];
+  version_datos?: string;
+  truncado?: boolean;
+};
+
 export function Mapa() {
   const ejemplo = useEjemplo();
   const { zona, fijar: fijarFoco, limpiar } = useFoco();
@@ -57,6 +63,8 @@ export function Mapa() {
   const [territorio, setTerritorio] = useState<Territorio | null>(null);
   const [catalogo, setCatalogo] = useState<CatalogoFiltros | null>(null);
   const [celdas, setCeldas] = useState<{ longitud: number; latitud: number; peso: number }[]>([]);
+  const [puntos, setPuntos] = useState<PuntoRegistro[]>([]);
+  const [puntosTruncados, setPuntosTruncados] = useState(false);
   const [leyenda, setLeyenda] = useState<LeyendaCalorDatos | null>(null);
   const [resumen, setResumen] = useState<ResumenReal | null>(null);
   const [datosListos, setDatosListos] = useState(false);
@@ -64,7 +72,7 @@ export function Mapa() {
   const [error, setError] = useState("");
   const [errorDatos, setErrorDatos] = useState("");
   const [densidad, setDensidad] = useState(true);
-  const [registros, setRegistros] = useState(false);
+  const [registros, setRegistros] = useState(true);
   const [agencias, setAgencias] = useState(true);
   const claveParametros = params.toString();
   const filtros = useMemo(() => borradorDesdeParametros(params), [claveParametros, params]);
@@ -87,17 +95,26 @@ export function Mapa() {
     setVigenteVista(false);
     setErrorDatos("");
     setCeldas([]);
+    setPuntos([]);
+    setPuntosTruncados(false);
     setLeyenda(null);
     setResumen(null);
-    void Promise.all([api<Calor>(`/api/mapas/calor${consultaDatos}`), api<ResumenReal>(`/api/mapas/resumen${consultaDatos}`)])
-      .then(([calor, territorial]) => {
+    void Promise.all([
+      api<Calor>(`/api/mapas/calor${consultaDatos}`),
+      api<ResumenReal>(`/api/mapas/resumen${consultaDatos}`),
+      api<RespuestaPuntos>(`/api/mapas/puntos${consultaDatos}`),
+    ])
+      .then(([calor, territorial, individuales]) => {
         if (!vivo) {
           return;
         }
-        if (calor.version_datos && territorial.version_datos && calor.version_datos !== territorial.version_datos) {
+        const versiones = [calor.version_datos, territorial.version_datos, individuales.version_datos].filter(Boolean);
+        if (new Set(versiones).size > 1) {
           throw new Error("El calor y los indicadores no comparten la versión de datos.");
         }
         setCeldas(calor.celdas);
+        setPuntos(individuales.puntos ?? []);
+        setPuntosTruncados(Boolean(individuales.truncado));
         setLeyenda(calor.leyenda);
         setResumen(territorial);
         setVigenteVista(true);
@@ -109,6 +126,8 @@ export function Mapa() {
         }
         const mensaje = causa instanceof Error ? causa.message : "No se pudo actualizar la vista.";
         setCeldas([]);
+        setPuntos([]);
+        setPuntosTruncados(false);
         setLeyenda(null);
         setResumen(null);
         setVigenteVista(false);
@@ -205,7 +224,9 @@ export function Mapa() {
           <i>{registros ? <Icono nombre="check" /> : null}</i>
           <span>
             <b>Registros</b>
-            {ejemplo.activo && celdas.length === 0 ? "Puntos ilustrativos, no son socios" : "Celdas agregadas, sin identificar personas"}
+            {ejemplo.activo && celdas.length === 0
+              ? "Puntos ilustrativos, no son socios"
+              : "Puntos al acercar, sin nombre ni identificador"}
           </span>
         </button>
         <button type="button" className={agencias ? "active" : ""} aria-pressed={agencias} onClick={() => setAgencias((valor) => !valor)}>
@@ -304,7 +325,7 @@ export function Mapa() {
           {!ejemplo.activo && celdas.length === 0
             ? " Densidad y registros no tienen coordenadas reales que dibujar."
             : celdas.length > 0
-              ? " La capa de calor usa las filas aceptadas, agrupadas en una grilla."
+              ? ` La capa de calor agrupa las filas aceptadas. Al acercar, cada registro se ve como un punto.${puntosTruncados ? " La vista de puntos está recortada al límite del servidor." : ""}`
               : " La capa encendida es ilustrativa, no son socios."}
           {resumen ? ` ${textoSinZona(resumen.registros_sin_zona)}` : ""}
           {resumen?.seleccion_vacia ? " La selección no tiene registros: es ausencia de datos, no un cero de la provincia." : ""}
@@ -333,6 +354,7 @@ export function Mapa() {
           capas={capas}
           ejemplo={vistaEjemplo}
           celdas={celdas}
+          puntos={puntos}
           provincia={elegida?.es_galapagos ? null : foco}
           mostrarAviso={false}
           onProvincia={(codigo) => elegir(codigo)}
