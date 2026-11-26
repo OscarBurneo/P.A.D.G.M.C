@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "../api";
 import { cantonesDe, DesplegableFiltro, type DominiosFiltro } from "../componentes/DesplegableFiltro";
+import { SelectorFecha } from "../componentes/SelectorFecha";
 import {
   borradorDesdeParametros,
   consultaApi,
@@ -108,8 +109,6 @@ export function Dashboard() {
   }
 
   const fechas = dominios?.fecha ?? [];
-  const fechasDesde = filtros.fechaHasta ? fechas.filter((fecha) => fecha <= filtros.fechaHasta) : fechas;
-  const fechasHasta = filtros.fechaDesde ? fechas.filter((fecha) => fecha >= filtros.fechaDesde) : fechas;
   const cantones = cantonesDe(dominios, filtros.provincias);
   const anio = resumen?.tendencia.at(-1)?.anio;
   const maximoProvincia = Math.max(1, ...(resumen?.provincias.map((fila) => fila.registros) ?? [1]));
@@ -146,17 +145,19 @@ export function Dashboard() {
           seleccionados={filtros.agencias}
           onChange={(valores) => aplicar({ agencias: valores })}
         />
-        <DesplegableFiltro
+        <SelectorFecha
           etiqueta="Fecha desde"
-          opciones={fechasDesde.map((valor) => ({ valor, etiqueta: valor }))}
-          seleccionados={filtros.fechaDesde ? [filtros.fechaDesde] : []}
-          onChange={(valores) => aplicar({ fechaDesde: valores[0] ?? "" })}
+          valor={filtros.fechaDesde}
+          fechas={fechas}
+          maximo={filtros.fechaHasta || undefined}
+          onChange={(valor) => aplicar({ fechaDesde: valor })}
         />
-        <DesplegableFiltro
+        <SelectorFecha
           etiqueta="Fecha hasta"
-          opciones={fechasHasta.map((valor) => ({ valor, etiqueta: valor }))}
-          seleccionados={filtros.fechaHasta ? [filtros.fechaHasta] : []}
-          onChange={(valores) => aplicar({ fechaHasta: valores[0] ?? "" })}
+          valor={filtros.fechaHasta}
+          fechas={fechas}
+          minimo={filtros.fechaDesde || undefined}
+          onChange={(valor) => aplicar({ fechaHasta: valor })}
         />
       </section>
       {hayFiltros(filtros) ? (
