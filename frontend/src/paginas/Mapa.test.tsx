@@ -183,7 +183,8 @@ describe("mapa con leyenda y filtros", () => {
     expect(rutas.some((ruta) => ruta.includes("provincia=Loja") && ruta.includes("canton=Catamayo"))).toBe(true);
 
     await usuario.click(screen.getByRole("button", { name: "Fecha desde: Todos" }));
-    expect(screen.getByRole("option", { name: "2024-03-15" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "2024-06-01" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Fecha desde" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "15 de marzo de 2024" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "14 de marzo de 2024" })).toBeDisabled();
   });
 });
