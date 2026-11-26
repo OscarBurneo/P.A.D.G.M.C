@@ -9,6 +9,7 @@ import {
   type Territorio,
 } from "../cobertura";
 import { Icono } from "../componentes/Icono";
+import { SelectorFecha } from "../componentes/SelectorFecha";
 import { LeyendaCalor, type LeyendaCalorDatos } from "../componentes/LeyendaCalor";
 import { MapaEcuador, type CapasMapa, type PuntoRegistro } from "../componentes/MapaEcuador";
 import { resumenProvinciaEjemplo } from "../datos/ejemplo";
@@ -173,8 +174,6 @@ export function Mapa() {
     [catalogo, filtros.provincias],
   );
   const fechas = catalogo?.dominios.fecha ?? [];
-  const fechasDesde = filtros.fechaHasta ? fechas.filter((fecha) => fecha <= filtros.fechaHasta) : fechas;
-  const fechasHasta = filtros.fechaDesde ? fechas.filter((fecha) => fecha >= filtros.fechaDesde) : fechas;
   const elegida = provincias.find((item) => item.codigo === foco) ?? null;
   const tira = busqueda ? conAgencia.filter((item) => item.nombre.toLocaleLowerCase("es").includes(busqueda)) : conAgencia;
   const medidas = useMemo(() => medidasReales(resumen), [resumen]);
@@ -278,17 +277,19 @@ export function Mapa() {
           multiple
           onChange={(valores) => aplicar({ agencias: valores })}
         />
-        <DesplegableFiltro
+        <SelectorFecha
           etiqueta="Fecha desde"
-          opciones={fechasDesde.map((valor) => ({ valor, etiqueta: valor }))}
-          seleccionados={filtros.fechaDesde ? [filtros.fechaDesde] : []}
-          onChange={(valores) => aplicar({ fechaDesde: valores[0] ?? "" })}
+          valor={filtros.fechaDesde}
+          fechas={fechas}
+          maximo={filtros.fechaHasta || undefined}
+          onChange={(valor) => aplicar({ fechaDesde: valor })}
         />
-        <DesplegableFiltro
+        <SelectorFecha
           etiqueta="Fecha hasta"
-          opciones={fechasHasta.map((valor) => ({ valor, etiqueta: valor }))}
-          seleccionados={filtros.fechaHasta ? [filtros.fechaHasta] : []}
-          onChange={(valores) => aplicar({ fechaHasta: valores[0] ?? "" })}
+          valor={filtros.fechaHasta}
+          fechas={fechas}
+          minimo={filtros.fechaDesde || undefined}
+          onChange={(valor) => aplicar({ fechaHasta: valor })}
         />
         <button
           type="button"

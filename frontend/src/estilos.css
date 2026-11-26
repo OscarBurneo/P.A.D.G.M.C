@@ -747,6 +747,73 @@ a.ranking-fila:hover { border-color: var(--blue-medium); }
 }
 .desplegable ul button[aria-selected="true"] { background: var(--blue-light); font-weight: 700; }
 .desplegable ul span { display: block; padding: 0.45rem 0.7rem; color: var(--muted); font-size: 12px; }
+.selector-fecha { position: relative; display: grid; gap: 4px; }
+.selector-fecha-etiqueta { font-size: 12px; font-weight: 700; color: var(--navy); }
+.selector-fecha > button {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: white;
+  padding: 0.62rem 1.6rem 0.62rem 0.7rem;
+  font-weight: 500;
+  background-image: linear-gradient(45deg, transparent 50%, var(--navy) 50%), linear-gradient(135deg, var(--navy) 50%, transparent 50%);
+  background-position: calc(100% - 14px) 55%, calc(100% - 9px) 55%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.selector-fecha-popover {
+  position: absolute;
+  z-index: 8;
+  top: calc(100% + 4px);
+  left: 0;
+  width: 280px;
+  max-width: calc(100vw - 32px);
+  padding: 10px;
+  background: white;
+  border: 1px solid var(--line);
+  box-shadow: 0 8px 24px rgba(0, 59, 104, 0.12);
+}
+.selector-fecha-nav {
+  display: grid;
+  grid-template-columns: 32px 32px minmax(0, 1fr) 32px 32px;
+  gap: 4px;
+  align-items: center;
+}
+.selector-fecha-nav button {
+  height: 32px;
+  border: 1px solid var(--line);
+  background: white;
+  color: var(--navy);
+  font-weight: 800;
+}
+.selector-fecha-nav button:disabled { opacity: 0.35; }
+.selector-fecha-nav strong {
+  color: var(--navy);
+  font-family: var(--fuente-titulo);
+  font-size: 14px;
+  text-align: center;
+  text-transform: capitalize;
+}
+.selector-fecha .rdp-root {
+  --rdp-accent-color: #003b68;
+  --rdp-accent-background-color: #fff6d8;
+  --rdp-day-height: 34px;
+  --rdp-day-width: 34px;
+  --rdp-day_button-height: 32px;
+  --rdp-day_button-width: 32px;
+  --rdp-today-color: #003b68;
+  margin: 0;
+  font-family: var(--fuente);
+}
+.selector-fecha .rdp-month_caption { display: none; }
+.selector-fecha .rdp-selected .rdp-day_button {
+  background: var(--yellow);
+  color: var(--navy);
+  border-color: var(--navy);
+  font-weight: 800;
+}
+.selector-fecha .rdp-today:not(.rdp-selected) .rdp-day_button { border-color: var(--yellow); }
+.selector-fecha-popover > .secundario { width: 100%; margin-top: 4px; }
 .paginacion { display: flex; gap: 0.7rem; align-items: center; margin-top: 0.8rem; }
 .csv-lab input[type="file"] { display: none; }
 .muestra { width: 0.95rem; height: 0.95rem; display: inline-block; }
