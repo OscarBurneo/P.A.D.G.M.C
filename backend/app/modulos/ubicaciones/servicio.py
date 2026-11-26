@@ -231,9 +231,7 @@ def _errores_de(fila, textos: dict[str, str]) -> list[dict[str, str]]:
 def _combinar(tipos: list[dict[str, str]], de_fila: list[dict[str, str]]) -> list[dict[str, str]]:
     campos_tipo = {error["campo"] for error in tipos}
     filtrados = [
-        error
-        for error in de_fila
-        if not (error["regla"].startswith("obligatorio_") and error["campo"] in campos_tipo)
+        error for error in de_fila if not (error["regla"].startswith("obligatorio_") and error["campo"] in campos_tipo)
     ]
     return tipos + filtrados
 

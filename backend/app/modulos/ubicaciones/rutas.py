@@ -34,8 +34,7 @@ def consultar(
         "total_registros": int(total or 0),
         "agregado": [],
         "nota": (
-            "Conteo de registros aceptados, incluidos los de alta manual. "
-            "Esta respuesta no identifica a cada socio."
+            "Conteo de registros aceptados, incluidos los de alta manual. Esta respuesta no identifica a cada socio."
         ),
     }
 

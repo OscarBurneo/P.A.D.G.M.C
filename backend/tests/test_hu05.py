@@ -92,8 +92,7 @@ def test_no_guarda_obligatorio_tipo_formato_ni_rango(admin: TestClient, db: Sess
     formula = _enviar(admin, identificador_socio="HU05-FORMULA", agencia="=Agencia")
     assert formula.status_code == 422
     assert any(
-        error["campo"] == "agencia" and error["regla"] == "formato_formula"
-        for error in formula.json()["errores"]
+        error["campo"] == "agencia" and error["regla"] == "formato_formula" for error in formula.json()["errores"]
     )
 
     db.rollback()
