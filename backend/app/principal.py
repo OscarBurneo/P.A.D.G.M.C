@@ -76,10 +76,10 @@ async def correlacion(request: Request, call_next):
 
 @app.exception_handler(ErrorAplicacion)
 async def manejar_error(_: Request, exc: ErrorAplicacion) -> JSONResponse:
-    return JSONResponse(
-        status_code=exc.estado,
-        content={"detalle": exc.detalle, "codigo": exc.codigo},
-    )
+    contenido: dict[str, object] = {"detalle": exc.detalle, "codigo": exc.codigo}
+    if exc.errores:
+        contenido["errores"] = exc.errores
+    return JSONResponse(status_code=exc.estado, content=contenido)
 
 
 @app.exception_handler(RequestValidationError)

@@ -68,9 +68,33 @@ python herramientas/generar_datos_sinteticos.py
 
 La prueba `test_el_csv_de_ejemplo_es_reproducible_y_marca_los_defectos` comprueba que el archivo del repositorio coincide con esa semilla.
 
+## HU-05 — validar antes de guardar
+
+`POST /api/ubicaciones` ya no responde 501. El alta manual usa el contrato de 8 columnas de [`contrato-columnas.md`](contrato-columnas.md), el mismo que la importación, y pasa por `clasificar()` para no duplicar las reglas. Solo una fila `aceptada` se guarda y responde 201. Cualquier motivo de rechazo u observación responde 422 `ubicacion_invalida` y no inserta la fila. Cada error trae `campo`, `regla`, `mensaje` y `accion`.
+
+| Regla | Qué exige | Si falla |
+| --- | --- | --- |
+| Obligatorios | Los ocho campos del contrato | 422 `obligatorio_<campo>` |
+| Tipo | Texto en los campos de texto y número o texto decimal en latitud y longitud | 422 `tipo_texto` o `tipo_decimal` |
+| Formato y rango | Decimal con un solo separador, latitud de -90 a 90, longitud de -180 a 180, fecha `AAAA-MM-DD`, `DD/MM/AAAA` o `DD-MM-AAAA` | 422 `formato_latitud`, `formato_longitud` o `formato_fecha` |
+| Fórmula | Un valor que empieza por `=` no se ejecuta | 422 `formato_formula` |
+| Ecuador | `ST_Intersects` contra `limites_provinciales`, incluidas Galápagos y el borde | 422 `coordenada_fuera_de_ecuador` |
+| Provincia | La provincia declarada tiene que ser la que contiene el punto | 422 `provincia_no_coincide` |
+| Duplicados | Identificador ya publicado o de otra alta, y celda de unos 5 m en el mismo cantón con otro identificador | 422 `identificador_duplicado` o `ubicacion_coincidente` |
+
+El permiso es `importaciones.publicar`, el mismo que confirma un lote. El conteo de `GET /api/ubicaciones` incluye estas altas. El mapa y el índice siguen leyendo solo lotes en estado `completado`.
+
+| Historia | Estado | Qué queda | Rutas | Prueba |
+| --- | --- | --- | --- | --- |
+| HU-05 | Hecho, con decisiones abajo | Validar y guardar una ubicación, o rechazarla por campo sin persistirla. | `POST /api/ubicaciones` | `test_hu05.py` |
+
 ## Decisiones que Oscar tiene que aprobar
 
 1. El catálogo de filtros `0.1.0-propuesto` y sus operadores fijos.
 2. La semántica Y / O y la frontera `ST_Intersects`, que incluye el límite.
 3. El catálogo de indicadores de la selección, sobre todo que la tendencia no se calcule cuando hay filtros y que `calidad_registros` siga siendo la del último lote.
 4. La columna `actualizado_en` del lote. Es una migración pequeña y reversible; el campo que ya se mostraba copiaba la fecha de alta.
+5. En el alta manual, una fila que la importación dejaría como `observada` (provincia distinta o celda de 5 m) no se guarda: HU-05 pide no persistir lo inválido. En el CSV esas filas sí se publican, fuera del mapa.
+6. No hay contorno cantonal, así que el cantón se valida como texto obligatorio y entra en la regla de duplicado por celda. No se contrasta con una geometría.
+7. El alta usa `importaciones.publicar` hasta que exista un permiso `ubicaciones.crear`. La cadena de versión del contrato sigue siendo `0.1.0-propuesto`.
+8. Un alta manual no entra al mapa ni al índice. Sí entra al conteo de `GET /api/ubicaciones`. Hace falta decidir si el calor debe contarla.

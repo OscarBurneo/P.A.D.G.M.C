@@ -1,13 +1,15 @@
-"""Consulta agregada. No entrega la posición ni el identificador de cada socio."""
+"""Consulta agregada y alta manual. La consulta no entrega la posición ni el identificador de cada socio."""
 
-from fastapi import APIRouter, Depends
+from typing import Any
+
+from fastapi import APIRouter, Body, Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.dependencias import exige, obtener_db
-from app.errores import ErrorAplicacion
 from app.modelos import Usuario
 from app.modulos.analitica.indice import CONDICION_ACEPTADA
+from app.modulos.ubicaciones.servicio import registrar as registrar_ubicacion
 
 router = APIRouter(prefix="/api/ubicaciones", tags=["ubicaciones"])
 
@@ -22,8 +24,8 @@ def consultar(
             f"""
             SELECT count(*)
             FROM ubicaciones u
-            JOIN lotes_importacion l ON l.id = u.lote_id
-            WHERE l.estado = 'completado'
+            LEFT JOIN lotes_importacion l ON l.id = u.lote_id
+            WHERE (l.estado = 'completado' OR u.lote_id IS NULL)
               AND {CONDICION_ACEPTADA}
             """
         )
@@ -31,14 +33,17 @@ def consultar(
     return {
         "total_registros": int(total or 0),
         "agregado": [],
-        "nota": "Conteo de registros aceptados. Esta respuesta no identifica a cada socio.",
+        "nota": (
+            "Conteo de registros aceptados, incluidos los de alta manual. "
+            "Esta respuesta no identifica a cada socio."
+        ),
     }
 
 
-@router.post("")
-def registrar(_: Usuario = Depends(exige("ubicaciones.consultar"))) -> None:
-    raise ErrorAplicacion(
-        501,
-        "El registro de ubicaciones se implementará cuando el diccionario de datos esté aprobado.",
-        "modulo_pendiente",
-    )
+@router.post("", status_code=201)
+def registrar(
+    datos: Any = Body(...),
+    actor: Usuario = Depends(exige("importaciones.publicar")),
+    db: Session = Depends(obtener_db),
+) -> dict:
+    return registrar_ubicacion(db, actor, datos)

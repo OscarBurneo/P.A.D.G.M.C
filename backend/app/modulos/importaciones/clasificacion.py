@@ -331,8 +331,8 @@ def _identificadores_publicados(db: Session, claves: set[str]) -> set[str]:
             """
             SELECT DISTINCT u.atributos_socio->>'identificador_clave' AS clave
             FROM ubicaciones u
-            JOIN lotes_importacion l ON l.id = u.lote_id
-            WHERE l.estado = 'completado'
+            LEFT JOIN lotes_importacion l ON l.id = u.lote_id
+            WHERE (l.estado = 'completado' OR u.lote_id IS NULL)
               AND u.atributos_socio->>'identificador_clave' IN (
                 SELECT valor FROM jsonb_array_elements_text(CAST(:claves AS jsonb)) AS valor
               )
@@ -371,8 +371,8 @@ def _celdas_publicadas(db: Session) -> dict[tuple[str, int, int], set[str]]:
                 u.atributos_socio->>'canton_clave' AS canton,
                 u.atributos_socio->>'identificador_clave' AS identificador
             FROM ubicaciones u
-            JOIN lotes_importacion l ON l.id = u.lote_id
-            WHERE l.estado = 'completado'
+            LEFT JOIN lotes_importacion l ON l.id = u.lote_id
+            WHERE l.estado = 'completado' OR u.lote_id IS NULL
             """
         )
     ).all()
