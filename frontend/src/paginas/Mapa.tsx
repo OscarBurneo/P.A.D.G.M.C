@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import {
@@ -8,6 +8,7 @@ import {
   type ResumenReal,
   type Territorio,
 } from "../cobertura";
+import { cantonesDe, DesplegableFiltro } from "../componentes/DesplegableFiltro";
 import { Icono } from "../componentes/Icono";
 import { LeyendaCalor, type LeyendaCalorDatos } from "../componentes/LeyendaCalor";
 import { MapaEcuador, type CapasMapa, type PuntoRegistro } from "../componentes/MapaEcuador";
@@ -169,7 +170,7 @@ export function Mapa() {
     return provincias.map((item) => ({ valor: item.codigo, etiqueta: item.nombre }));
   }, [catalogo, provincias]);
   const cantonesVisibles = useMemo(
-    () => cantonesDe(catalogo, filtros.provincias),
+    () => cantonesDe(catalogo?.dominios, filtros.provincias),
     [catalogo, filtros.provincias],
   );
   const fechas = catalogo?.dominios.fecha ?? [];
@@ -257,7 +258,7 @@ export function Mapa() {
           seleccionados={filtros.provincias}
           multiple
           onChange={(valores) => {
-            const permitidos = new Set(cantonesDe(catalogo, valores));
+            const permitidos = new Set(cantonesDe(catalogo?.dominios, valores));
             aplicar({
               provincias: valores,
               cantones: valores.length === 0 ? filtros.cantones : filtros.cantones.filter((canton) => permitidos.has(canton)),
@@ -451,116 +452,6 @@ type MuestraEjemplo = {
   crecimiento: number;
   nivel: "Muy alta" | "Alta" | "Media";
 };
-
-function cantonesDe(catalogo: CatalogoFiltros | null, provinciasElegidas: string[]) {
-  const pares = catalogo?.dominios.canton_por_provincia ?? [];
-  const lista = pares.length > 0 ? pares.map((par) => par.canton) : (catalogo?.dominios.canton ?? []);
-  const origen = pares.length > 0 && provinciasElegidas.length > 0
-    ? pares.filter((par) => provinciasElegidas.includes(par.provincia)).map((par) => par.canton)
-    : lista;
-  return [...new Set(origen)].sort((a, b) => a.localeCompare(b, "es"));
-}
-
-function DesplegableFiltro({
-  etiqueta,
-  opciones,
-  seleccionados,
-  multiple = false,
-  onChange,
-}: {
-  etiqueta: string;
-  opciones: { valor: string; etiqueta: string }[];
-  seleccionados: string[];
-  multiple?: boolean;
-  onChange: (valores: string[]) => void;
-}) {
-  const [abierto, setAbierto] = useState(false);
-  const caja = useRef<HTMLDivElement>(null);
-  const resumen = seleccionados.length === 0
-    ? "Todos"
-    : opciones
-        .filter((opcion) => seleccionados.includes(opcion.valor))
-        .map((opcion) => opcion.etiqueta)
-        .join(", ") || seleccionados.join(", ");
-
-  useEffect(() => {
-    if (!abierto) {
-      return;
-    }
-    function fuera(evento: MouseEvent) {
-      if (!caja.current?.contains(evento.target as Node)) {
-        setAbierto(false);
-      }
-    }
-    function tecla(evento: KeyboardEvent) {
-      if (evento.key === "Escape") {
-        setAbierto(false);
-      }
-    }
-    document.addEventListener("mousedown", fuera);
-    document.addEventListener("keydown", tecla);
-    return () => {
-      document.removeEventListener("mousedown", fuera);
-      document.removeEventListener("keydown", tecla);
-    };
-  }, [abierto]);
-
-  function elegirOpcion(valor: string | null) {
-    if (valor === null) {
-      onChange([]);
-      setAbierto(false);
-      return;
-    }
-    if (!multiple) {
-      onChange([valor]);
-      setAbierto(false);
-      return;
-    }
-    onChange(seleccionados.includes(valor) ? seleccionados.filter((item) => item !== valor) : [...seleccionados, valor]);
-  }
-
-  return (
-    <div className="desplegable" ref={caja}>
-      <span className="desplegable-etiqueta">{etiqueta}</span>
-      <button
-        type="button"
-        aria-haspopup="listbox"
-        aria-expanded={abierto}
-        aria-label={`${etiqueta}: ${resumen}`}
-        onClick={() => setAbierto((valor) => !valor)}
-      >
-        {resumen}
-      </button>
-      {abierto ? (
-        <ul role="listbox" aria-label={etiqueta} aria-multiselectable={multiple || undefined}>
-          <li role="presentation">
-            <button type="button" role="option" aria-selected={seleccionados.length === 0} onClick={() => elegirOpcion(null)}>
-              Todos
-            </button>
-          </li>
-          {opciones.length === 0 ? (
-            <li role="presentation">
-              <span>Sin valores publicados</span>
-            </li>
-          ) : (
-            opciones.map((opcion) => (
-              <li key={opcion.valor} role="presentation">
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={seleccionados.includes(opcion.valor)}
-                  onClick={() => elegirOpcion(opcion.valor)}
-                >
-                  {opcion.etiqueta}
-                </button>
-              </li>
-            ))
-          )}
-        </ul>
-      ) : null}
-    </div>
-  );
-}
 
 function textoMetrica(metrica: MetricaSeleccion) {
   if (!metrica.disponible || metrica.valor === null) {

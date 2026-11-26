@@ -27,7 +27,7 @@ export const CAPITULOS: Capitulo[] = [
     n: "01",
     texto: "Resumen",
     titulo: "Pulso territorial",
-    nota: "Una lectura ejecutiva de dónde se concentra la demanda y cómo se mueve el potencial.",
+    nota: "Dashboard de inicio: una lectura de los registros por territorio, agencia y periodo.",
     permiso: null,
     icono: "resumen",
     fin: true,
