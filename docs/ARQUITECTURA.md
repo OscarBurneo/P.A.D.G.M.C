@@ -19,7 +19,7 @@ Cada módulo habla con los demás por funciones Python y por las rutas HTTP de a
 | `admin` | Parámetros de negocio y perfil de hash de solo lectura | Entregado |
 | `mapas` | Agregado sin posiciones de personas, resumen con índice y `GET /api/mapas/calor` | El calor es una grilla, no un socio |
 | `cobertura` | `GET /api/cobertura/provincias`, `PATCH /api/cobertura/provincias/{codigo}` | Límites ADM1 y provincias con agencia |
-| `ubicaciones` | Conteo de lo publicado. El alta manual responde 501 | Los puntos entran por la publicación del lote |
+| `ubicaciones` | Conteo de lo aceptado y `POST /api/ubicaciones` con la validación de HU-05 | El alta manual no entra al mapa; el lote publicado sí |
 | `importaciones` | Carga, mapeo, publicación, cancelación, retiro e historial | Entregado con contrato propuesto |
 | `validacion` | `GET /api/validacion` y `GET /api/validacion/{lote_id}` | Informe de encabezados y filas |
 | `analitica` | Interfaz `ProcesoAnalitico`, ejemplo, e índice `indice_concentracion` | El ejemplo no cambia. El índice es propuesto |
