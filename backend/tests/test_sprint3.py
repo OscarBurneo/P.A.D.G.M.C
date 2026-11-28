@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.principal import app
+from tests.conftest import CONTRASENA, ingresar
 from tests.test_importaciones import _cargar, _csv, _fila
 
 
@@ -252,6 +254,31 @@ def test_puntos_individuales_respetan_el_filtro_y_omiten_datos_personales(admin:
     assert loja.json()["filtros_activos"][0]["campo"] == "zona"
     assert all(punto["provincia"] == "Loja" for punto in loja.json()["puntos"])
     assert loja.json()["version_datos"] == cuerpo["version_datos"]
+
+
+def test_puntos_exige_permiso_y_el_calor_sigue_con_mapas_ver(admin: TestClient) -> None:
+    lote = _cargar(admin, _csv([_fila("SOC-PERM")]))
+    assert admin.post(f"/api/importaciones/{lote['id']}/publicar").status_code == 200
+    assert admin.get("/api/mapas/puntos").status_code == 200
+    creado = admin.post(
+        "/api/usuarios",
+        json={
+            "identificador": "visor",
+            "correo": "visor@example.com",
+            "nombre": "Visor",
+            "contrasena": CONTRASENA,
+            "rol_codigo": "usuario",
+        },
+    )
+    assert creado.status_code == 201, creado.text
+    with TestClient(app) as anonimo:
+        assert anonimo.get("/api/mapas/puntos").status_code == 401
+        ingresar(anonimo, "visor")
+        denegado = anonimo.get("/api/mapas/puntos")
+        assert denegado.status_code == 403, denegado.text
+        assert "longitud" not in denegado.text
+        assert anonimo.get("/api/mapas/calor").status_code == 200
+        assert anonimo.get("/api/mapas/resumen").status_code == 200
 
 
 def _par(admin: TestClient, params: dict | list | None = None) -> dict:

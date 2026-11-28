@@ -26,6 +26,7 @@ import {
 } from "../filtros";
 import { textoDensidadKm2, textoSinZona } from "../formato";
 import { type FocoZona, useFoco } from "../foco";
+import { puede, useSesion } from "../sesion";
 
 type ParProvinciaCanton = { provincia: string; canton: string };
 
@@ -59,6 +60,8 @@ type RespuestaPuntos = {
 
 export function Mapa() {
   const ejemplo = useEjemplo();
+  const { cuenta } = useSesion();
+  const vePuntos = puede(cuenta, "mapas.ver_puntos");
   const { zona, fijar: fijarFoco, limpiar } = useFoco();
   const [params, setParams] = useSearchParams();
   const [territorio, setTerritorio] = useState<Territorio | null>(null);
@@ -100,22 +103,25 @@ export function Mapa() {
     setPuntosTruncados(false);
     setLeyenda(null);
     setResumen(null);
+    const puntosPromesa = vePuntos
+      ? api<RespuestaPuntos>(`/api/mapas/puntos${consultaDatos}`)
+      : Promise.resolve(null);
     void Promise.all([
       api<Calor>(`/api/mapas/calor${consultaDatos}`),
       api<ResumenReal>(`/api/mapas/resumen${consultaDatos}`),
-      api<RespuestaPuntos>(`/api/mapas/puntos${consultaDatos}`),
+      puntosPromesa,
     ])
       .then(([calor, territorial, individuales]) => {
         if (!vivo) {
           return;
         }
-        const versiones = [calor.version_datos, territorial.version_datos, individuales.version_datos].filter(Boolean);
+        const versiones = [calor.version_datos, territorial.version_datos, individuales?.version_datos].filter(Boolean);
         if (new Set(versiones).size > 1) {
           throw new Error("El calor y los indicadores no comparten la versión de datos.");
         }
         setCeldas(calor.celdas);
-        setPuntos(individuales.puntos ?? []);
-        setPuntosTruncados(Boolean(individuales.truncado));
+        setPuntos(individuales?.puntos ?? []);
+        setPuntosTruncados(Boolean(individuales?.truncado));
         setLeyenda(calor.leyenda);
         setResumen(territorial);
         setVigenteVista(true);
@@ -138,11 +144,11 @@ export function Mapa() {
     return () => {
       vivo = false;
     };
-  }, [consultaDatos]);
+  }, [consultaDatos, vePuntos]);
 
   const capas = useMemo<CapasMapa>(
-    () => ({ densidad, registros, agencias }),
-    [densidad, registros, agencias],
+    () => ({ densidad, registros: vePuntos && registros, agencias }),
+    [agencias, densidad, registros, vePuntos],
   );
 
   function aplicar(parcial: Partial<BorradorFiltros>) {
@@ -219,15 +225,17 @@ export function Mapa() {
             Intensidad de potenciales socios
           </span>
         </button>
-        <button type="button" className={registros ? "active" : ""} aria-pressed={registros} onClick={() => setRegistros((valor) => !valor)}>
-          <i>{registros ? <Icono nombre="check" /> : null}</i>
-          <span>
-            <b>Registros</b>
-            {ejemplo.activo && celdas.length === 0
-              ? "Puntos ilustrativos, no son socios"
-              : "Puntos al acercar, sin nombre ni identificador"}
-          </span>
-        </button>
+        {vePuntos ? (
+          <button type="button" className={registros ? "active" : ""} aria-pressed={registros} onClick={() => setRegistros((valor) => !valor)}>
+            <i>{registros ? <Icono nombre="check" /> : null}</i>
+            <span>
+              <b>Registros</b>
+              {ejemplo.activo && celdas.length === 0
+                ? "Puntos ilustrativos, no son socios"
+                : "Puntos al acercar, sin nombre ni identificador"}
+            </span>
+          </button>
+        ) : null}
         <button type="button" className={agencias ? "active" : ""} aria-pressed={agencias} onClick={() => setAgencias((valor) => !valor)}>
           <i>{agencias ? <Icono nombre="check" /> : null}</i>
           <span>
@@ -326,7 +334,9 @@ export function Mapa() {
           {!ejemplo.activo && celdas.length === 0
             ? " Densidad y registros no tienen coordenadas reales que dibujar."
             : celdas.length > 0
-              ? ` La capa de calor agrupa las filas aceptadas. Al acercar, cada registro se ve como un punto.${puntosTruncados ? " La vista de puntos está recortada al límite del servidor." : ""}`
+              ? vePuntos
+                ? ` La capa de calor agrupa las filas aceptadas. Al acercar, cada registro se ve como un punto.${puntosTruncados ? " La vista de puntos está recortada al límite del servidor." : ""}`
+                : " La capa de calor agrupa las filas aceptadas."
               : " La capa encendida es ilustrativa, no son socios."}
           {resumen ? ` ${textoSinZona(resumen.registros_sin_zona)}` : ""}
           {resumen?.seleccion_vacia ? " La selección no tiene registros: es ausencia de datos, no un cero de la provincia." : ""}

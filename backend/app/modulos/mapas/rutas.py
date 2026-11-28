@@ -1,7 +1,7 @@
 """Respuestas geográficas del Sprint 0.
 
-La matriz de atributos está pendiente (P-02). Ninguna respuesta incluye
-coordenadas individuales ni identificadores de socios.
+La matriz de atributos está pendiente (P-02). El calor y los agregados no
+identifican a un socio. Solo /puntos devuelve coordenadas, y exige mapas.ver_puntos.
 """
 
 from fastapi import APIRouter, Depends, Request
@@ -72,7 +72,7 @@ def calor_mapa(
 @router.get("/puntos")
 def puntos_mapa(
     request: Request,
-    _: Usuario = Depends(exige("mapas.ver")),
+    _: Usuario = Depends(exige("mapas.ver_puntos")),
     db: Session = Depends(obtener_db),
 ) -> dict:
     return puntos(db, interpretar(request.query_params, db))
