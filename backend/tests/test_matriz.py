@@ -119,6 +119,8 @@ def _ejecutar(permiso: str, rol: str, ctx) -> object:
         return cliente.get("/api/auditoria")
     if permiso == "mapas.ver":
         return cliente.get("/api/mapas/agregado")
+    if permiso == "mapas.ver_puntos":
+        return cliente.get("/api/mapas/puntos")
     if permiso == "mapas.detalle":
         return cliente.get("/api/mapas/detalle")
     if permiso == "ubicaciones.consultar":
@@ -155,6 +157,7 @@ EXITOS = {
     "permisos.editar": {200},
     "auditoria.leer": {200},
     "mapas.ver": {200},
+    "mapas.ver_puntos": {200},
     "mapas.detalle": {200},
     "ubicaciones.consultar": {200},
     "parametros.leer": {200},
@@ -197,5 +200,6 @@ def test_celda_de_la_matriz(escenario, rol: str, permiso: str) -> None:
 
 def test_anonimo_no_entra_a_rutas_protegidas(cliente: TestClient) -> None:
     assert cliente.get("/api/mapas/agregado").status_code == 401
+    assert cliente.get("/api/mapas/puntos").status_code == 401
     assert cliente.get("/api/usuarios").status_code == 401
     assert cliente.get("/api/auth/yo").status_code == 401

@@ -33,6 +33,12 @@ PERMISOS: tuple[tuple[str, str, str, str], ...] = (
     ("permisos.editar", "Modificar permisos", "autorizacion", "Modifica permisos por rol, sin excepciones por cuenta."),
     ("auditoria.leer", "Consultar auditoría", "auditoria", "Consulta eventos inmutables."),
     ("mapas.ver", "Ver mapa agregado", "mapas", "Consulta el mapa sin coordenadas individuales."),
+    (
+        "mapas.ver_puntos",
+        "Ver puntos del mapa",
+        "mapas",
+        "Consulta las coordenadas de cada registro aceptado, sin nombre ni identificador.",
+    ),
     ("mapas.detalle", "Ver detalle de mapa", "mapas", "Consulta el detalle reservado al administrador."),
     (
         "ubicaciones.consultar",

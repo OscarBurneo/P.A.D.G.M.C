@@ -27,6 +27,25 @@ vi.mock("../ejemplo", () => ({
   useEjemplo: () => ({ activo: false, cambiar: vi.fn() }),
 }));
 
+const permisos = vi.hoisted(() => ({ lista: ["mapas.ver", "mapas.ver_puntos"] }));
+
+vi.mock("../sesion", () => ({
+  useSesion: () => ({
+    cuenta: {
+      id: "1",
+      identificador: "admin",
+      nombre: "Administrador",
+      correo: "admin@example.com",
+      activo: true,
+      rol: { codigo: "administrador", nombre: "Administrador" },
+      permisos: permisos.lista,
+    },
+    recargar: vi.fn(async () => undefined),
+    cerrar: vi.fn(async () => undefined),
+  }),
+  puede: (cuenta: { permisos?: string[] } | null, permiso: string) => Boolean(cuenta?.permisos?.includes(permiso)),
+}));
+
 vi.mock("../foco", () => ({
   useFoco: () => ({
     zona: { zonaNombre: null, provinciaNombre: null },
@@ -80,6 +99,7 @@ describe("mapa con leyenda y filtros", () => {
   });
 
   beforeEach(() => {
+    permisos.lista = ["mapas.ver", "mapas.ver_puntos"];
     api.mockReset();
     cargarTerritorio.mockReset();
     cargarTerritorio.mockResolvedValue({
@@ -186,5 +206,20 @@ describe("mapa con leyenda y filtros", () => {
     expect(screen.getByRole("dialog", { name: "Fecha desde" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "15 de marzo de 2024" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "14 de marzo de 2024" })).toBeDisabled();
+  });
+
+  it("oculta los puntos individuales cuando el rol no tiene mapas.ver_puntos", async () => {
+    permisos.lista = ["mapas.ver"];
+    render(
+      <MemoryRouter>
+        <Mapa />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole("heading", { name: "Leyenda del calor" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Densidad/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Puntos al acercar/ })).not.toBeInTheDocument();
+    const rutas = api.mock.calls.map((llamada) => String(llamada[0]));
+    expect(rutas.some((ruta) => ruta.startsWith("/api/mapas/calor"))).toBe(true);
+    expect(rutas.some((ruta) => ruta.startsWith("/api/mapas/puntos"))).toBe(false);
   });
 });
