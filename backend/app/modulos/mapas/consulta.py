@@ -2,13 +2,27 @@
 
 El resumen no incluye posiciones individuales. La capa de calor usa
 centroides de una grilla y vive en otra ruta, fuera de /api/mapas/agregado.
+Con filtros, el índice se recalcula al vuelo con la misma fórmula y no
+reemplaza el resultado vigente.
 """
 
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.modelos import ResultadoAnalisis
-from app.modulos.analitica.indice import CONDICION_ACEPTADA, DEFINICION_INDICE
+from app.modulos.analitica.indice import (
+    CONDICION_ACEPTADA,
+    DEFINICION_INDICE,
+    medir_seleccion,
+    version_de_datos,
+)
+from app.modulos.mapas.filtros import (
+    NOTA_INDICADORES,
+    VERSION_CATALOGO_FILTROS,
+    VERSION_CATALOGO_INDICADORES,
+    Seleccion,
+    predicado,
+)
 
 _NOTA_VACIA = (
     "No hay registros publicados. Las provincias salen de la cobertura configurada "
@@ -18,9 +32,30 @@ _NOTA_DATOS = (
     "El índice de concentración usa las filas aceptadas de los lotes publicados. "
     "La tendencia queda vacía si no había un resultado anterior."
 )
+_NOTA_FILTRO = (
+    "El índice y la densidad se recalculan sobre la selección. La tendencia no se compara con el resultado anterior."
+)
+_NOTA_AUSENCIA = "La selección no tiene registros aceptados. Es ausencia de datos, no un valor cero."
+
+LIMITE_PUNTOS = 4000
+_VARIABLE = "Registros aceptados"
+_UNIDAD = "registros por celda de 0,01 grados"
+_PATRONES = ("puntos", "rayas", "diagonal", "solido")
+_ETIQUETAS = ("Bajo", "Medio", "Alto", "Muy alto")
 
 
-def resumen(db: Session) -> dict:
+def resumen(db: Session, seleccion: Seleccion) -> dict:
+    filtro_sql, params = predicado(seleccion)
+    if seleccion.vacia:
+        indicadores = _indicadores(db)
+        nota = None
+    else:
+        medido = medir_seleccion(db, filtro_sql, params)
+        indicadores = {
+            "provincias": medido["provincias"],
+            "registros_sin_zona": medido["registros_sin_zona"],
+        }
+        nota = _NOTA_FILTRO
     cobertura = db.execute(
         text(
             """
@@ -31,7 +66,6 @@ def resumen(db: Session) -> dict:
             """
         )
     ).all()
-    indicadores = _indicadores(db)
     snapshot = [item for item in indicadores.get("provincias") or [] if isinstance(item, dict)]
     por_codigo = {str(item.get("codigo")): item for item in snapshot}
     provincias = []
@@ -69,20 +103,32 @@ def resumen(db: Session) -> dict:
         )
     ]
     total = sum(int(item.get("registros") or 0) for item in snapshot)
+    sin_zona = int(indicadores.get("registros_sin_zona") or 0)
+    if not seleccion.vacia and total == 0 and sin_zona == 0:
+        nota = _NOTA_AUSENCIA
+    version = version_de_datos(db)
     return {
         "total_registros": total,
         "zonas_analizadas": len(ranking),
         "alta_concentracion": sum(1 for item in ranking if int(item["indice"]) >= 75),
-        "registros_sin_zona": int(indicadores.get("registros_sin_zona") or 0),
+        "registros_sin_zona": sin_zona,
+        "zonas_en_cero": _zonas_en_cero(snapshot, seleccion.zonas),
         "calidad_registros": _calidad(db),
         "definicion_indice": DEFINICION_INDICE,
-        "nota": _NOTA_DATOS if total else _NOTA_VACIA,
+        "nota": nota if nota else (_NOTA_DATOS if total else _NOTA_VACIA),
         "provincias": provincias,
         "ranking": ranking,
+        "version_datos": version,
+        "version_catalogo_filtros": VERSION_CATALOGO_FILTROS,
+        "filtros_activos": seleccion.activos(),
+        "seleccion_vacia": not seleccion.vacia and total == 0 and sin_zona == 0,
+        "indicadores_seleccion": _indicadores_seleccion(db, filtro_sql, params, total + sin_zona, ranking),
     }
 
 
-def calor(db: Session) -> dict:
+def calor(db: Session, seleccion: Seleccion) -> dict:
+    filtro_sql, params = predicado(seleccion)
+    extra = f" AND ({filtro_sql})" if filtro_sql else ""
     filas = db.execute(
         text(
             f"""
@@ -93,11 +139,12 @@ def calor(db: Session) -> dict:
             FROM ubicaciones u
             JOIN lotes_importacion l ON l.id = u.lote_id
             WHERE l.estado = 'completado'
-              AND {CONDICION_ACEPTADA}
+              AND {CONDICION_ACEPTADA}{extra}
             GROUP BY 1, 2
             ORDER BY 2, 1
             """
-        )
+        ),
+        params,
     ).all()
     total = db.execute(
         text(
@@ -106,18 +153,84 @@ def calor(db: Session) -> dict:
             FROM ubicaciones u
             JOIN lotes_importacion l ON l.id = u.lote_id
             WHERE l.estado = 'completado'
-              AND {CONDICION_ACEPTADA}
+              AND {CONDICION_ACEPTADA}{extra}
             """
-        )
+        ),
+        params,
     ).scalar()
+    celdas = [{"longitud": float(fila.x), "latitud": float(fila.y), "peso": int(fila.peso)} for fila in filas]
+    total_entero = int(total or 0)
     return {
         "definicion": (
-            "Centroides de una grilla de 0,01 grados sobre los registros aceptados. "
+            "Centroides de una grilla de 0,01 grados sobre los registros aceptados de la selección. "
             "Cada celda agrupa varios registros y no identifica a una persona. "
             "Las filas observadas no entran."
         ),
-        "total_registros": int(total or 0),
-        "celdas": [{"longitud": float(fila.x), "latitud": float(fila.y), "peso": int(fila.peso)} for fila in filas],
+        "total_registros": total_entero,
+        "celdas": celdas,
+        "version_datos": version_de_datos(db),
+        "version_catalogo_filtros": VERSION_CATALOGO_FILTROS,
+        "filtros_activos": seleccion.activos(),
+        "seleccion_vacia": not seleccion.vacia and total_entero == 0,
+        "leyenda": _leyenda(celdas, total_entero),
+    }
+
+
+def puntos(db: Session, seleccion: Seleccion) -> dict:
+    """Puntos aceptados de la selección, sin nombre ni identificador."""
+
+    filtro_sql, params = predicado(seleccion)
+    extra = f" AND ({filtro_sql})" if filtro_sql else ""
+    total = db.execute(
+        text(
+            f"""
+            SELECT count(*)
+            FROM ubicaciones u
+            JOIN lotes_importacion l ON l.id = u.lote_id
+            WHERE l.estado = 'completado'
+              AND {CONDICION_ACEPTADA}{extra}
+            """
+        ),
+        params,
+    ).scalar()
+    filas = db.execute(
+        text(
+            f"""
+            SELECT
+                ST_X(u.geom) AS x,
+                ST_Y(u.geom) AS y,
+                u.atributos_socio->>'provincia' AS provincia,
+                u.atributos_socio->>'canton' AS canton,
+                u.atributos_socio->>'agencia' AS agencia,
+                u.atributos_socio->>'fecha' AS fecha
+            FROM ubicaciones u
+            JOIN lotes_importacion l ON l.id = u.lote_id
+            WHERE l.estado = 'completado'
+              AND {CONDICION_ACEPTADA}{extra}
+            ORDER BY u.id
+            LIMIT :limite
+            """
+        ),
+        {**params, "limite": LIMITE_PUNTOS},
+    ).all()
+    total_entero = int(total or 0)
+    return {
+        "limite": LIMITE_PUNTOS,
+        "truncado": total_entero > LIMITE_PUNTOS,
+        "total_registros": total_entero,
+        "puntos": [
+            {
+                "longitud": float(fila.x),
+                "latitud": float(fila.y),
+                "provincia": fila.provincia or "",
+                "canton": fila.canton or "",
+                "agencia": fila.agencia or "",
+                "fecha": fila.fecha or "",
+            }
+            for fila in filas
+        ],
+        "version_datos": version_de_datos(db),
+        "filtros_activos": seleccion.activos(),
     }
 
 
@@ -144,3 +257,182 @@ def _calidad(db: Session) -> float | None:
     if fila is None or not fila.total_procesadas:
         return None
     return round(100 * fila.total_aceptadas / fila.total_procesadas, 1)
+
+
+def _zonas_en_cero(snapshot: list[dict], zonas: tuple[str, ...]) -> list[str]:
+    if not zonas:
+        return []
+    pedidas = set(zonas)
+    return [
+        str(item.get("nombre"))
+        for item in snapshot
+        if str(item.get("codigo")) in pedidas and int(item.get("registros") or 0) == 0
+    ]
+
+
+def _indicadores_seleccion(
+    db: Session,
+    filtro_sql: str,
+    params: dict,
+    total_seleccion: int,
+    ranking: list[dict],
+) -> dict:
+    hay = total_seleccion > 0
+    agencias = _agencias_distintas(db, filtro_sql, params) if hay else None
+    densidades = [float(item["densidad"]) for item in ranking if item.get("densidad") is not None]
+    densidades_km2 = [float(item["densidad_km2"]) for item in ranking if item.get("densidad_km2") is not None]
+    return {
+        "version": VERSION_CATALOGO_INDICADORES,
+        "propuesto": True,
+        "nota": NOTA_INDICADORES,
+        "metricas": [
+            _metrica(
+                "total_registros",
+                "Registros aceptados",
+                "registro",
+                "Conteo de filas aceptadas de la selección, incluidas las que no caen en una provincia.",
+                "entero",
+                "La selección vacía vale 0.",
+                total_seleccion,
+                True,
+            ),
+            _metrica(
+                "agencias",
+                "Agencias distintas",
+                "agencia",
+                "Conteo distinto de agencia no vacía en la selección.",
+                "entero",
+                "Sin registros, no disponible.",
+                agencias,
+                hay,
+            ),
+            _metrica(
+                "provincias_con_registros",
+                "Provincias con registros",
+                "provincia",
+                "Provincias de la capa con al menos un registro aceptado en la selección.",
+                "entero",
+                "Sin registros, no disponible.",
+                len(ranking) if hay else None,
+                hay,
+            ),
+            _metrica(
+                "densidad_maxima",
+                "Densidad máxima por agencia",
+                "registros por agencia",
+                "Máximo de registros / max(agencias, 1) entre las provincias de la selección.",
+                "4 decimales",
+                "Sin provincias con registros, no disponible.",
+                max(densidades) if densidades else None,
+                bool(densidades),
+            ),
+            _metrica(
+                "densidad_km2_maxima",
+                "Densidad máxima por km²",
+                "registros por km²",
+                "Máximo de registros / área provincial entre las provincias de la selección.",
+                "4 decimales",
+                "Sin provincias con registros, no disponible.",
+                max(densidades_km2) if densidades_km2 else None,
+                bool(densidades_km2),
+            ),
+        ],
+    }
+
+
+def _metrica(
+    codigo: str,
+    nombre: str,
+    unidad: str,
+    formula: str,
+    redondeo: str,
+    nulos: str,
+    valor: object,
+    disponible: bool,
+) -> dict:
+    return {
+        "codigo": codigo,
+        "nombre": nombre,
+        "unidad": unidad,
+        "formula": formula,
+        "redondeo": redondeo,
+        "nulos": nulos,
+        "valor": valor if disponible else None,
+        "disponible": disponible,
+    }
+
+
+def _agencias_distintas(db: Session, filtro_sql: str, params: dict) -> int:
+    extra = f" AND ({filtro_sql})" if filtro_sql else ""
+    total = db.execute(
+        text(
+            f"""
+            SELECT count(DISTINCT lower(btrim(u.atributos_socio->>'agencia')))
+            FROM ubicaciones u
+            JOIN lotes_importacion l ON l.id = u.lote_id
+            WHERE l.estado = 'completado'
+              AND {CONDICION_ACEPTADA}
+              AND btrim(coalesce(u.atributos_socio->>'agencia', '')) <> ''{extra}
+            """
+        ),
+        params,
+    ).scalar()
+    return int(total or 0)
+
+
+def _leyenda(celdas: list[dict], total: int) -> dict:
+    pesos = [int(celda["peso"]) for celda in celdas]
+    intervalos = _intervalos(max(pesos)) if pesos else []
+    return {
+        "variable": _VARIABLE,
+        "unidad": _UNIDAD,
+        "significado": (
+            "El color muestra la intensidad relativa del peso de cada celda dentro de la selección vigente. "
+            "El halo es local: no cubre la provincia entera. Al acercar, el calor se apaga y cada registro "
+            "aceptado se ve como un punto, sin nombre ni identificador. "
+            "La etiqueta, el intervalo y el patrón se leen sin depender del color."
+        ),
+        "cero": (
+            "Una zona pedida con 0 registros aceptados. El cero significa que la provincia existe "
+            "en la capa y la selección no tiene registros ahí."
+        ),
+        "ausencia": "No hay celdas de calor para la selección. No equivale al valor cero.",
+        "ausencia_datos": total == 0 or not celdas,
+        "intervalos": intervalos,
+        "escala": (
+            "Las franjas usan luminancia creciente y un patrón (puntos, rayas, diagonal o sólido) "
+            "para distinguirse en escala de grises."
+        ),
+    }
+
+
+def _intervalos(maximo: int) -> list[dict]:
+    if maximo <= 1:
+        return [_intervalo(0, 1, 1)]
+    cortes = (
+        max(1, maximo // 4),
+        max(1, maximo // 2),
+        max(1, (3 * maximo) // 4),
+        maximo,
+    )
+    inicio = 1
+    salida = []
+    for indice, fin in enumerate(cortes):
+        if inicio > fin:
+            continue
+        if salida and fin == salida[-1]["hasta"] and inicio > salida[-1]["hasta"]:
+            continue
+        salida.append(_intervalo(indice, inicio, fin))
+        inicio = fin + 1
+    return salida
+
+
+def _intervalo(indice: int, desde: int, hasta: int) -> dict:
+    etiqueta = _ETIQUETAS[min(indice, len(_ETIQUETAS) - 1)]
+    return {
+        "etiqueta": etiqueta,
+        "desde": desde,
+        "hasta": hasta,
+        "patron": _PATRONES[min(indice, len(_PATRONES) - 1)],
+        "significado": f"{etiqueta}: de {desde} a {hasta} {_UNIDAD} en esta selección.",
+    }

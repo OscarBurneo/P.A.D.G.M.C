@@ -3,7 +3,7 @@
 import uuid
 from typing import Any
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, or_, select
 from sqlalchemy.orm import Session
 
 from app.correlacion import obtener_correlacion
@@ -75,6 +75,7 @@ def consulta(
     actor: str | None = None,
     operacion: str | None = None,
     entidad: str | None = None,
+    lote: str | None = None,
     resultado: str | None = None,
     desde: object | None = None,
     hasta: object | None = None,
@@ -84,8 +85,11 @@ def consulta(
         sentencia = sentencia.where(EventoAuditoria.actor_etiqueta.ilike(f"%{actor.strip()}%"))
     if operacion:
         sentencia = sentencia.where(EventoAuditoria.operacion == operacion.strip())
+    if lote:
+        sentencia = sentencia.where(EventoAuditoria.entidad_id == lote.strip())
     if entidad:
-        sentencia = sentencia.where(EventoAuditoria.entidad_tipo == entidad.strip())
+        texto = entidad.strip()
+        sentencia = sentencia.where(or_(EventoAuditoria.entidad_tipo == texto, EventoAuditoria.entidad_id == texto))
     if resultado:
         sentencia = sentencia.where(EventoAuditoria.resultado == resultado.strip())
     if desde is not None:

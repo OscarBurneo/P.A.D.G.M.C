@@ -82,6 +82,7 @@ La matriz propuesta, versión `0.1.0-propuesta`, estado `pendiente_de_aprobacion
 | `roles.leer`, `roles.asignar`, `permisos.leer`, `permisos.editar` | sí | no |
 | `auditoria.leer` | sí | no |
 | `mapas.ver`, `ubicaciones.consultar` | sí | sí |
+| `mapas.ver_puntos` | sí | no |
 | `mapas.detalle` | sí | no |
 | `parametros.leer`, `parametros.editar` | sí | no |
 | `analitica.ejemplo`, `importaciones.cargar`, `importaciones.publicar`, `importaciones.retirar`, `validacion.consultar` | sí | no |

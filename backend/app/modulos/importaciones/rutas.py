@@ -2,6 +2,7 @@
 
 import json
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from pydantic import BaseModel, Field
@@ -25,10 +26,15 @@ class RetiroEntrada(BaseModel):
 
 @router.get("")
 def listar(
+    actor: str | None = None,
+    estado: str | None = None,
+    texto: str | None = None,
+    desde: datetime | None = None,
+    hasta: datetime | None = None,
     _: Usuario = Depends(exige("importaciones.cargar")),
     db: Session = Depends(obtener_db),
 ) -> dict:
-    return servicio.listar(db)
+    return servicio.listar(db, actor=actor, estado=estado, texto=texto, desde=desde, hasta=hasta)
 
 
 @router.post("")

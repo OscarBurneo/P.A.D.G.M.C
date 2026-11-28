@@ -27,6 +27,7 @@ def sembrar(db: Session) -> None:
     permisos = _permisos(db)
     roles = _roles(db)
     _matriz(db, roles, permisos)
+    _puntos_para_admin(db, roles, permisos)
     _parametros(db)
     _admin(db, roles["administrador"])
     sembrar_geografia(db)
@@ -78,6 +79,19 @@ def _matriz(db: Session, roles: dict[str, Rol], permisos: dict[str, Permiso]) ->
                 creada_en=ahora_utc(),
             )
         )
+        db.flush()
+
+
+def _puntos_para_admin(db: Session, roles: dict[str, Rol], permisos: dict[str, Permiso]) -> None:
+    """El rol usuario no recibe este permiso. Solo el administrador ve coordenadas."""
+
+    rol = roles.get("administrador")
+    permiso = permisos.get("mapas.ver_puntos")
+    if rol is None or permiso is None:
+        return
+    existente = db.scalar(select(RolPermiso).where(RolPermiso.rol_id == rol.id, RolPermiso.permiso_id == permiso.id))
+    if existente is None:
+        db.add(RolPermiso(rol_id=rol.id, permiso_id=permiso.id))
         db.flush()
 
 

@@ -1,8 +1,30 @@
 import maplibregl from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
 import "maplibre-gl/dist/maplibre-gl.css";
+import {
+  PARADAS_INTENSIDAD_CALOR,
+  PARADAS_OPACIDAD_CALOR,
+  PARADAS_OPACIDAD_PUNTO,
+  PARADAS_RADIO_CALOR,
+  PARADAS_RADIO_PUNTO,
+  expresionZoom,
+  fichaPunto,
+} from "../calor-estilo";
+
+function estiloZoom(paradas: ReadonlyArray<readonly [number, number]>) {
+  return expresionZoom(paradas) as maplibregl.ExpressionSpecification;
+}
 import { cargarTerritorio, type Caja, type Territorio } from "../cobertura";
 import { CANTONES_EJEMPLO } from "../datos/ejemplo";
+
+export type PuntoRegistro = {
+  longitud: number;
+  latitud: number;
+  provincia: string;
+  canton: string;
+  agencia: string;
+  fecha: string;
+};
 
 type Modo = "calor" | "puntos";
 
@@ -71,6 +93,7 @@ export function MapaEcuador({
   capas,
   ejemplo,
   celdas = [],
+  puntos = [],
   provincia,
   onProvincia,
   mostrarAviso = true,
@@ -80,6 +103,7 @@ export function MapaEcuador({
   capas?: CapasMapa;
   ejemplo: boolean;
   celdas?: { longitud: number; latitud: number; peso: number }[];
+  puntos?: PuntoRegistro[];
   provincia: string | null;
   onProvincia?: (codigo: string) => void;
   mostrarAviso?: boolean;
@@ -207,10 +231,10 @@ export function MapaEcuador({
         type: "heatmap",
         source: "muestras",
         paint: {
-          "heatmap-weight": ["get", "peso"],
-          "heatmap-intensity": 1.35,
-          "heatmap-radius": compacto ? 46 : 54,
-          "heatmap-opacity": 0.85,
+          "heatmap-weight": ["interpolate", ["linear"], ["get", "peso"], 0, 0, 0.25, 0.2, 1, 0.85],
+          "heatmap-intensity": estiloZoom(PARADAS_INTENSIDAD_CALOR),
+          "heatmap-radius": estiloZoom(PARADAS_RADIO_CALOR),
+          "heatmap-opacity": estiloZoom(PARADAS_OPACIDAD_CALOR),
           "heatmap-color": [
             "interpolate",
             ["linear"],
@@ -229,6 +253,39 @@ export function MapaEcuador({
         },
       });
       mapa.moveLayer("calor", "linea");
+      mapa.addSource("registros", { type: "geojson", data: VACIO });
+      mapa.addLayer({
+        id: "puntos",
+        type: "circle",
+        source: "registros",
+        paint: {
+          "circle-radius": estiloZoom(PARADAS_RADIO_PUNTO),
+          "circle-color": "#FFCB35",
+          "circle-opacity": estiloZoom(PARADAS_OPACIDAD_PUNTO),
+          "circle-stroke-width": 1.25,
+          "circle-stroke-color": "#003B68",
+          "circle-stroke-opacity": estiloZoom(PARADAS_OPACIDAD_PUNTO),
+        },
+      });
+      mapa.on("click", "puntos", (evento) => {
+        const lineas = fichaPunto(evento.features?.[0]?.properties as Record<string, unknown> | undefined);
+        if (!lineas.length || !evento.lngLat) {
+          return;
+        }
+        const nodo = document.createElement("div");
+        for (const linea of lineas) {
+          const fila = document.createElement("div");
+          fila.textContent = linea;
+          nodo.append(fila);
+        }
+        new maplibregl.Popup({ closeButton: true, offset: 10 }).setLngLat(evento.lngLat).setDOMContent(nodo).addTo(mapa);
+      });
+      mapa.on("mouseenter", "puntos", () => {
+        mapa.getCanvas().style.cursor = "pointer";
+      });
+      mapa.on("mouseleave", "puntos", () => {
+        mapa.getCanvas().style.cursor = "";
+      });
       mapa.addLayer({
         id: "circulos",
         type: "circle",
@@ -333,7 +390,22 @@ export function MapaEcuador({
             }
           : VACIO;
       (mapa.getSource("muestras") as maplibregl.GeoJSONSource | undefined)?.setData(muestras);
+      const registrosReales: GeoJSON.FeatureCollection = {
+        type: "FeatureCollection",
+        features: puntos.map((punto) => ({
+          type: "Feature",
+          properties: {
+            provincia: punto.provincia,
+            canton: punto.canton,
+            agencia: punto.agencia,
+            fecha: punto.fecha,
+          },
+          geometry: { type: "Point", coordinates: [punto.longitud, punto.latitud] },
+        })),
+      };
+      (mapa.getSource("registros") as maplibregl.GeoJSONSource | undefined)?.setData(registrosReales);
       mapa.setLayoutProperty("calor", "visibility", densidad && (reales || ejemplo) ? "visible" : "none");
+      mapa.setLayoutProperty("puntos", "visibility", registros && puntos.length > 0 ? "visible" : "none");
       mapa.setLayoutProperty("circulos", "visibility", !reales && ejemplo && registros ? "visible" : "none");
       mapa.setPaintProperty("relleno", "fill-color", agencias ? RELLENO_CON_AGENCIA : RELLENO_SIN_CAPA);
       mapa.setPaintProperty("linea", "line-color", agencias ? LINEA_CON_AGENCIA : LINEA_SIN_CAPA);
@@ -349,7 +421,7 @@ export function MapaEcuador({
       }
     };
     const intentar = () => {
-      if (!mapa.getSource("provincias") || !mapa.getSource("muestras")) {
+      if (!mapa.getSource("provincias") || !mapa.getSource("muestras") || !mapa.getSource("registros")) {
         return;
       }
       aplicar();
@@ -362,7 +434,7 @@ export function MapaEcuador({
     return () => {
       mapa.off("load", intentar);
     };
-  }, [territorio, ejemplo, celdas, provincia, densidad, registros, agencias]);
+  }, [territorio, ejemplo, celdas, puntos, provincia, densidad, registros, agencias]);
 
   useEffect(() => {
     if (!recuadro.current || !territorio?.recuadro_galapagos) {

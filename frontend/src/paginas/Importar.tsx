@@ -29,9 +29,11 @@ type Lote = {
   id: string;
   nombre: string;
   fuente: string;
+  actor?: string;
   validos: number;
   observadas: number;
   rechazadas: number;
+  invalidos?: number;
   total: number;
   cuadra: boolean;
   actualizado_en: string;
@@ -40,6 +42,14 @@ type Lote = {
   repetido?: boolean;
   intentos?: number;
   informe?: Informe | null;
+};
+
+type FiltrosHistorial = {
+  actor: string;
+  estado: string;
+  texto: string;
+  desde: string;
+  hasta: string;
 };
 
 const PASOS = ["Seleccionar", "Mapear", "Validar", "Publicar"] as const;
@@ -67,9 +77,40 @@ export function Importar() {
   const [ocupado, setOcupado] = useState(false);
   const [arrastrando, setArrastrando] = useState(false);
   const [motivo, setMotivo] = useState("Retiro solicitado");
+  const [filtroActor, setFiltroActor] = useState("");
+  const [filtroEstado, setFiltroEstado] = useState("");
+  const [filtroTexto, setFiltroTexto] = useState("");
+  const [filtroDesde, setFiltroDesde] = useState("");
+  const [filtroHasta, setFiltroHasta] = useState("");
 
-  async function refrescar() {
-    const respuesta = await api<{ nota: string; columnas: Columna[]; lotes: Lote[] }>("/api/importaciones");
+  async function refrescar(filtros?: FiltrosHistorial) {
+    const vigentes = filtros ?? {
+      actor: filtroActor,
+      estado: filtroEstado,
+      texto: filtroTexto,
+      desde: filtroDesde,
+      hasta: filtroHasta,
+    };
+    const consulta = new URLSearchParams();
+    if (vigentes.actor.trim()) {
+      consulta.set("actor", vigentes.actor.trim());
+    }
+    if (vigentes.estado) {
+      consulta.set("estado", vigentes.estado);
+    }
+    if (vigentes.texto.trim()) {
+      consulta.set("texto", vigentes.texto.trim());
+    }
+    if (vigentes.desde) {
+      consulta.set("desde", vigentes.desde);
+    }
+    if (vigentes.hasta) {
+      consulta.set("hasta", vigentes.hasta);
+    }
+    const query = consulta.toString();
+    const respuesta = await api<{ nota: string; columnas: Columna[]; lotes: Lote[] }>(
+      `/api/importaciones${query ? `?${query}` : ""}`,
+    );
     setNota(respuesta.nota);
     setColumnas(respuesta.columnas);
     setLotes(respuesta.lotes);
@@ -222,11 +263,16 @@ export function Importar() {
       >
         <input
           ref={entrada}
+          className="selector-archivo"
           type="file"
           accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          hidden
+          aria-label="Archivo CSV o XLSX"
           aria-describedby="nota-csv"
-          onChange={(evento) => void enviar(evento.target.files?.[0])}
+          onChange={(evento) => {
+            const archivo = evento.target.files?.[0];
+            evento.target.value = "";
+            void enviar(archivo);
+          }}
         />
         <div className="lab-orbit">
           <Icono nombre="archivo" />
@@ -330,6 +376,48 @@ export function Importar() {
       ) : null}
       <section className="panel span-completo">
         <h2>Historial de archivos</h2>
+        <form
+          className="filtros"
+          onSubmit={(evento) => {
+            evento.preventDefault();
+            void refrescar({
+              actor: filtroActor,
+              estado: filtroEstado,
+              texto: filtroTexto,
+              desde: filtroDesde,
+              hasta: filtroHasta,
+            }).catch((causa: unknown) => setError(causa instanceof Error ? causa.message : "No se pudo filtrar el historial."));
+          }}
+        >
+          <label>
+            Actor
+            <input value={filtroActor} onChange={(evento) => setFiltroActor(evento.target.value)} />
+          </label>
+          <label>
+            Estado
+            <select value={filtroEstado} onChange={(evento) => setFiltroEstado(evento.target.value)}>
+              <option value="">Todos</option>
+              <option value="pendiente">Pendiente</option>
+              <option value="completado">Completado</option>
+              <option value="finalizado_con_errores">Finalizado con errores</option>
+              <option value="cancelado">Cancelado</option>
+              <option value="retirado">Retirado</option>
+            </select>
+          </label>
+          <label>
+            Archivo
+            <input value={filtroTexto} onChange={(evento) => setFiltroTexto(evento.target.value)} />
+          </label>
+          <label>
+            Desde
+            <input type="date" value={filtroDesde} onChange={(evento) => setFiltroDesde(evento.target.value)} />
+          </label>
+          <label>
+            Hasta
+            <input type="date" value={filtroHasta} onChange={(evento) => setFiltroHasta(evento.target.value)} />
+          </label>
+          <button type="submit">Filtrar historial</button>
+        </form>
         {lotes.length === 0 ? (
           <p>No hay lotes cargados.</p>
         ) : (
@@ -338,12 +426,13 @@ export function Importar() {
               <thead>
                 <tr>
                   <th>Archivo</th>
+                  <th>Actor</th>
                   <th>Fuente</th>
                   <th>Válidas</th>
                   <th>Observadas</th>
                   <th>Rechazadas</th>
                   <th>Estado</th>
-                  <th>Fecha</th>
+                  <th>Actualizado</th>
                 </tr>
               </thead>
               <tbody>
@@ -354,6 +443,7 @@ export function Importar() {
                         {lote.nombre}
                       </button>
                     </td>
+                    <td>{lote.actor ?? "—"}</td>
                     <td>{lote.fuente}</td>
                     <td>{formatoEntero(lote.validos)}</td>
                     <td>{formatoEntero(lote.observadas)}</td>

@@ -194,6 +194,9 @@ class LoteImportacion(Base):
     formato: Mapped[str] = mapped_column(String(8), nullable=False)
     estado: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     fecha: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_ahora, index=True)
+    actualizado_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_ahora, index=True
+    )
     actor_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("usuarios.id", ondelete="RESTRICT"),

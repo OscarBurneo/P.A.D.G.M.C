@@ -3,7 +3,7 @@
 import hashlib
 import json
 import uuid
-from datetime import UTC
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import func, select, text
@@ -52,13 +52,45 @@ _NOTA = (
 _ESTADOS_IDEMPOTENTES = frozenset({PENDIENTE, EJECUTANDOSE, COMPLETADO, FINALIZADO_CON_ERRORES})
 
 
-def listar(db: Session) -> dict:
-    lotes = db.scalars(select(LoteImportacion).order_by(LoteImportacion.fecha.desc())).all()
+def listar(
+    db: Session,
+    *,
+    actor: str | None = None,
+    estado: str | None = None,
+    texto: str | None = None,
+    desde: datetime | None = None,
+    hasta: datetime | None = None,
+) -> dict:
+    if estado and estado not in ETIQUETAS:
+        raise ErrorAplicacion(422, "El estado no está en el catálogo del lote.", "estado_desconocido")
+    consulta = (
+        select(LoteImportacion, Usuario.identificador)
+        .join(Usuario, Usuario.id == LoteImportacion.actor_id)
+        .order_by(LoteImportacion.actualizado_en.desc(), LoteImportacion.fecha.desc(), LoteImportacion.id.desc())
+    )
+    if actor and actor.strip():
+        consulta = consulta.where(Usuario.identificador.ilike(_comodin(actor), escape="\\"))
+    if estado:
+        consulta = consulta.where(LoteImportacion.estado == estado)
+    if texto and texto.strip():
+        consulta = consulta.where(LoteImportacion.nombre_archivo.ilike(_comodin(texto), escape="\\"))
+    if desde is not None:
+        consulta = consulta.where(LoteImportacion.actualizado_en >= desde)
+    if hasta is not None:
+        consulta = consulta.where(LoteImportacion.actualizado_en <= hasta)
+    filas = db.execute(consulta).all()
     return {
         "nota": _NOTA,
         "contrato_version": VERSION_CONTRATO,
         "columnas": columnas_publicas(),
-        "lotes": [_resumen(db, lote) for lote in lotes],
+        "filtros": {
+            "actor": actor or "",
+            "estado": estado or "",
+            "texto": texto or "",
+            "desde": desde.isoformat() if desde else "",
+            "hasta": hasta.isoformat() if hasta else "",
+        },
+        "lotes": [_resumen(db, lote, identificador) for lote, identificador in filas],
     }
 
 
@@ -130,10 +162,13 @@ def recibir(
         )
         db.commit()
         raise
+    ahora = datetime.now(UTC)
     lote = LoteImportacion(
         nombre_archivo=visible,
         formato=formato,
         estado=PENDIENTE,
+        fecha=ahora,
+        actualizado_en=ahora,
         actor_id=actor.id,
         resumen_criptografico=resumen,
         contrato_version=VERSION_CONTRATO,
@@ -192,6 +227,7 @@ def revalidar(db: Session, actor: Usuario, lote_id: uuid.UUID, mapeo: dict) -> d
             resultado="revalidado",
         )
     )
+    _tocar(lote)
     _auditar(
         db,
         actor,
@@ -216,6 +252,7 @@ def publicar(db: Session, actor: Usuario, lote_id: uuid.UUID) -> dict:
         publicables = [fila for fila in clasificacion.filas if fila.clasificacion in {"aceptada", "observada"}]
         if not clasificacion.estructura_valida or not publicables:
             lote.estado = FINALIZADO_CON_ERRORES
+            _tocar(lote)
             _auditar(
                 db,
                 actor,
@@ -232,6 +269,7 @@ def publicar(db: Session, actor: Usuario, lote_id: uuid.UUID) -> dict:
         db.flush()
         insertar_ubicaciones(db, lote.id, publicables)
         lote.estado = COMPLETADO
+        _tocar(lote)
         db.flush()
         recalcular(db, actor.id)
         _auditar(
@@ -275,6 +313,7 @@ def cancelar(db: Session, actor: Usuario, lote_id: uuid.UUID) -> dict:
             "lote_no_cancelable",
         )
     lote.estado = CANCELADO
+    _tocar(lote)
     _auditar(
         db,
         actor,
@@ -296,6 +335,7 @@ def retirar(db: Session, actor: Usuario, lote_id: uuid.UUID, motivo: str) -> dic
     if lote.estado != COMPLETADO:
         raise ErrorAplicacion(409, "Solo se retira un lote publicado.", "lote_no_retirable")
     lote.estado = RETIRADO
+    _tocar(lote)
     db.flush()
     recalcular(db, actor.id)
     _auditar(
@@ -385,30 +425,43 @@ def _mapeo_guardado(db: Session, lote_id: uuid.UUID) -> dict | None:
     return mapeo if isinstance(mapeo, dict) else None
 
 
-def _resumen(db: Session, lote: LoteImportacion) -> dict:
+def _resumen(db: Session, lote: LoteImportacion, actor: str | None = None) -> dict:
     informe = _informe(db, lote.id)
     aceptadas = informe.total_aceptadas if informe else 0
     observadas = informe.total_observadas if informe else 0
     procesadas = informe.total_procesadas if informe else 0
     rechazadas = max(0, procesadas - aceptadas - observadas)
+    if actor is None:
+        actor = db.scalar(select(Usuario.identificador).where(Usuario.id == lote.actor_id))
     return {
         "id": str(lote.id),
         "nombre": lote.nombre_archivo,
         "fuente": lote.formato.upper(),
         "formato": lote.formato,
+        "actor": actor,
         "validos": aceptadas,
         "observadas": observadas,
         "rechazadas": rechazadas,
-        "invalidos": observadas,
+        "invalidos": rechazadas,
         "total": procesadas,
         "cuadra": procesadas == aceptadas + observadas + rechazadas,
-        "actualizado_en": lote.fecha.astimezone(UTC).isoformat(),
+        "creado_en": lote.fecha.astimezone(UTC).isoformat(),
+        "actualizado_en": lote.actualizado_en.astimezone(UTC).isoformat(),
         "estado": ETIQUETAS.get(lote.estado, lote.estado),
         "estado_codigo": lote.estado,
         "contrato_version": lote.contrato_version,
         "cuenta_en_analisis": lote.estado == COMPLETADO,
         "repetido": False,
     }
+
+
+def _tocar(lote: LoteImportacion) -> None:
+    lote.actualizado_en = datetime.now(UTC)
+
+
+def _comodin(valor: str) -> str:
+    limpio = valor.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{limpio}%"
 
 
 def _informe_publico(informe: InformeValidacion) -> dict:
